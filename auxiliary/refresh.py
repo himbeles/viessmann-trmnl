@@ -50,18 +50,22 @@ def main():
         time.sleep(3)
     variables = result.get('variables') or {}
     features = variables.get('data', variables.get('IDX_0', {}).get('data', [])) if isinstance(variables, dict) else []
+    # TRMNL's API summarizes arrays as {_compacted, count, sample}; that is
+    # an API response format, not an empty feature list on the dashboard.
+    feature_count = len(features) if isinstance(features, list) else (
+        features.get('count', 0) if isinstance(features, dict) and features.get('_compacted') else 0)
     health = request('/logs?limit=1').get('health', {})
     print(json.dumps({
         'refresh_status': result.get('status'),
         'refresh_success': result.get('success'),
         'transform_warning_present': bool(result.get('warning')),
-        'feature_count': len(features) if isinstance(features, list) else 0,
+        'feature_count': feature_count,
         'health_state': health.get('state'),
         'error_retry_count': health.get('error_retry_count'),
         'last_refresh': health.get('last_refresh'),
         'error_http_codes': re.findall(r'HTTP\s+(\d{3})', str(health.get('error_message') or '') + json.dumps(result.get('logs', []))),
     }, indent=2), flush=True)
-    if result.get('success') is not True or result.get('warning') or health.get('state') != 'active' or not features:
+    if result.get('success') is not True or result.get('warning') or health.get('state') not in ('active', 'healthy') or not isinstance(feature_count, int) or feature_count <= 0:
         raise RuntimeError('Live polling verification failed. Inspect the plugin status on TRMNL.')
 
 
