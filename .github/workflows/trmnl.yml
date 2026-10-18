@@ -79,3 +79,8 @@ jobs:
         env:
           TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
         run: node auxiliary/deploy.mjs --yes
+      - name: Reset health and verify live polling
+        if: steps.config.outputs.ready == 'true'
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+        run: python3 auxiliary/refresh.py
