@@ -46,7 +46,8 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '32,4' : '32.4')
         expect(html.css('.vp-blocks > section').size).to eq(3)
         expect(html.at_css('.vp-water-block .vp-water').text).to include(language == 'de' ? '48,2' : '48.2')
-        expect(html.at_css('.vp-heating-block .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
+        expect(html.at_css('.vp-heating-block > .vp-metrics .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
+        expect(html.at_css('.vp-plot-row > .vp-supply-target .vp-label').text).to eq(language == 'de' ? 'Vorlauf-Solltemperatur' : 'Supply target temperature')
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')

@@ -143,7 +143,7 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 
 The dashboard groups information into three bordered blocks:
 
-- **Heating:** outdoor temperature and room/heating targets above the full-width curve; small slope/offset details beside the graph heading; daily heating energy figures and pressure at the bottom.
+- **Heating:** outdoor temperature, room target and pressure above the curve; supply target to the right of the graph; small slope/offset details beside the graph heading; daily heating energy figures at the bottom.
 - **Hot water:** cylinder temperature, configured target and daily energy figures with black values and labels for hot water.
 - **Total / Gesamt:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
 
@@ -209,4 +209,4 @@ The Total heat-today subtitle is **Whole device / Gesamtes Gerät**, including t
 
 Actual flow/return readouts are hidden in both blocks. The transform retains sensor models and activity gating for diagnostics; targets remain visible.
 
-The current balanced layout places Heating and Hot water above a full-width Total row. Key temperatures and energy totals use larger type; the plot uses its full width without a side readout. Actual flow/return temperatures have been removed from both blocks. The heating supply target remains visible above the plot and as its diamond marker. Heating, water and pressure use inline monochrome glyphs with adjacent text labels, so the icons do not replace the accessible labels. Raw sensor models remain available for diagnostics.
+The current balanced layout places Heating and Hot water above a full-width Total row. Key temperatures and energy totals use larger type; the plot uses its full width without a side readout. Actual flow/return temperatures have been removed from both blocks. The heating supply target appears to the right of the plot, labeled Supply target temperature / Vorlauf-Solltemperatur, and as its diamond marker. Pressure occupies its previous top-row position. Heating, water and pressure use inline monochrome glyphs with adjacent text labels, so the icons do not replace the accessible labels. Raw sensor models remain available for diagnostics.
