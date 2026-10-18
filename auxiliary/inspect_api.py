@@ -18,10 +18,10 @@ def main():
     args = parser.parse_args()
     ids = [args.installation, args.gateway, args.device]
     if any(x is not None for x in ids) and not all(x is not None for x in ids):
-        parser.error('--installation, --gateway und --device zusammen angeben')
-    token = getpass.getpass('Viessmann Access-Token (verdeckt): ').strip()
+        parser.error('Provide --installation, --gateway and --device together')
+    token = getpass.getpass('Viessmann access token (hidden): ').strip()
     if not token:
-        parser.error('Access-Token fehlt')
+        parser.error('Access token is required')
     if args.installation is not None:
         installation, gateway, device = [urllib.parse.quote(x, safe='') for x in ids]
         path = f'/features/installations/{installation}/gateways/{gateway}/devices/{device}/features/'
@@ -32,13 +32,13 @@ def main():
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.load(response)
     except urllib.error.HTTPError as exc:
-        print(f'HTTP {exc.code}: Zugang, Berechtigung oder Kontingent prüfen.', file=sys.stderr)
+        print(f'HTTP {exc.code}: Check authentication, permissions or rate limits.', file=sys.stderr)
         return 1
     except (urllib.error.URLError, TimeoutError, ValueError):
-        print('API-Abruf fehlgeschlagen. Netzwerk oder Antwortformat prüfen.', file=sys.stderr)
+        print('API request failed. Check the network or response format.', file=sys.stderr)
         return 1
     if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
-        print('Unerwartetes API-Format: data-Array fehlt.', file=sys.stderr)
+        print('Unexpected API format: data array is missing.', file=sys.stderr)
         return 1
     if args.installation is not None:
         selected = []

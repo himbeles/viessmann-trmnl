@@ -1,41 +1,49 @@
-name: Viessmann Wärmepumpe · API
+name: Viessmann heat pump
 strategy: polling
 refresh_interval: 60
-no_screen_padding: no
-dark_mode: no
+no_screen_padding: 'no'
+dark_mode: 'no'
 custom_fields:
+  - keyname: language
+    name: Display language
+    field_type: select
+    options:
+      - English: en
+      - Deutsch: de
+    default: en
+    optional: true
   - keyname: installation_id
-    name: API-Installations-ID
+    name: API installation ID
     field_type: string
   - keyname: gateway_serial
-    name: Gateway-Seriennummer aus der API
+    name: API gateway serial number
     field_type: string
   - keyname: device_id
-    name: API-Geräte-ID (mit Geräteliste abgleichen)
+    name: API device ID (verify against the device list)
     field_type: string
     default: "1"
   - keyname: circuit
-    name: Heizkreis (0 = erster Heizkreis)
+    name: Heating circuit (0 = first circuit)
     field_type: string
     default: "0"
     optional: true
   - keyname: supply_feature
-    name: "API-Feature: Vorlauftemperatur"
+    name: "API feature: supply temperature"
     field_type: string
     default: heating.secondaryCircuit.sensors.temperature.supply
     optional: true
   - keyname: water_feature
-    name: "API-Feature: Warmwasserspeicher"
+    name: "API feature: hot-water cylinder temperature"
     field_type: string
     default: heating.dhw.sensors.temperature.dhwCylinder
     optional: true
   - keyname: outside_feature
-    name: "API-Feature: Außentemperatur"
+    name: "API feature: outdoor temperature"
     field_type: string
     default: heating.sensors.temperature.outside
     optional: true
   - keyname: stale_minutes
-    name: Veraltet nach Minuten
+    name: Mark readings stale after (minutes)
     field_type: string
     default: "120"
     optional: true

@@ -3,3 +3,4 @@ node_modules/
 .trmnlp.yml
 __pycache__/
 *.py[cod]
+auxiliary/output/

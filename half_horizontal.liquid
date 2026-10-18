@@ -1,5 +1,14 @@
 {% comment %}Read-only Viessmann data. No write commands or tokens in rendered markup.{% endcomment %}
 {% assign cfg = trmnl.plugin_settings.custom_fields_values %}
+{% assign language = cfg.language | default: 'en' %}
+{% if language == 'de' %}
+{% assign labels = 'Viessmann Wärmepumpe|Zuhause · Heizkreis|DEMO · Beispieldaten|Noch nicht verbunden|Daten veraltet|Zeitstand unbekannt|API-Daten|Heizung|Vorlauftemperatur|Warmwasser|Speichertemperatur|Außen|Außensensor|Heizkurve|Schematische Heizkurve, keine Viessmann-Sollwerte|Außentemperatur °C|Schema · keine Viessmann-Sollwerte|Heizkurve erscheint, sobald<br>Neigung und Niveau vorliegen.|Neigung|Niveau|Betriebsart|Heizen + Warmwasser|Nur Warmwasser|Heizen|Nicht verfügbar|Ältester Wert:|Messzeitpunkt fehlt|Werte unvollständig|Nur Anzeige' | split: '|' %}
+{% assign decimal = ',' %}{% assign date_format = '%d.%m. %H:%M' %}
+{% else %}
+{% assign language = 'en' %}
+{% assign labels = 'Viessmann heat pump|Home · Heating circuit|DEMO · Sample data|Not connected|Stale data|Timestamp unknown|API data|Heating|Supply temperature|Hot water|Cylinder temperature|Outdoor|Outdoor sensor|Heating curve|Schematic heating curve, not Viessmann setpoints|Outdoor temperature °C|Schematic · not Viessmann setpoints|The heating curve appears when<br>slope and offset are available.|Slope|Offset|Operating mode|Heating + hot water|Hot water only|Heating|Unavailable|Oldest reading:|Reading timestamp missing|Incomplete data|Read only' | split: '|' %}
+{% assign decimal = '.' %}{% assign date_format = '%Y-%m-%d %H:%M' %}
+{% endif %}
 {% assign features = data %}
 {% if IDX_0.data %}{% assign features = IDX_0.data %}{% endif %}
 {% assign circuit = cfg.circuit | default: '0' | append: '' %}
@@ -61,30 +70,30 @@
   .vp-footer{display:flex;justify-content:space-between;gap:12px;font-size:11px;border-top:1px solid #000;padding-top:1.2%}.vp-empty{flex:1;display:flex;align-items:center;justify-content:center;border:1px dashed #000;margin-top:8px;text-align:center;font-size:14px;padding:16px}
   .vp-compact .vp-bottom{display:none}.vp-compact .vp-metrics{flex:1;align-items:center}.vp-small .vp-metrics{grid-template-columns:1fr;gap:5px}.vp-small .vp-metric{display:flex;justify-content:space-between;align-items:center;border:0;padding:0}.vp-small .vp-value{font-size:28px}.vp-small .vp-metric .vp-note{display:none}.vp-small .vp-kicker{display:none}.vp-small .vp-footer{font-size:10px}.vp-small .vp-brand{font-size:16px}
 </style>
-<div class="vp VP_LAYOUT_CLASS">
-  <div class="vp-head"><div><div class="vp-kicker">Zuhause · Heizkreis {{ circuit | escape }}</div><div class="vp-brand">Viessmann Wärmepumpe</div></div>
-    <div class="vp-badge">{% if demo %}DEMO · Beispieldaten{% elsif found == 0 %}Noch nicht verbunden{% elsif stale %}Daten veraltet{% elsif missing_time or oldest == nil %}Zeitstand unbekannt{% else %}API-Daten{% endif %}</div>
+<div class="vp vp-compact" lang="{{ language }}">
+  <div class="vp-head"><div><div class="vp-kicker">{{ labels[1] }} {{ circuit | escape }}</div><div class="vp-brand">{{ labels[0] }}</div></div>
+    <div class="vp-badge">{% if demo %}{{ labels[2] }}{% elsif found == 0 %}{{ labels[3] }}{% elsif stale %}{{ labels[4] }}{% elsif missing_time or oldest == nil %}{{ labels[5] }}{% else %}{{ labels[6] }}{% endif %}</div>
   </div>
   <div class="vp-metrics">
-    <div class="vp-metric"><div class="vp-label">Heizung</div><div class="vp-value">{% if supply != nil %}{{ supply | round: 1 | replace: '.', ',' }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">Vorlauftemperatur</div></div>
-    <div class="vp-metric"><div class="vp-label">Warmwasser</div><div class="vp-value">{% if water != nil %}{{ water | round: 1 | replace: '.', ',' }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">Speichertemperatur</div></div>
-    <div class="vp-metric"><div class="vp-label">Außen</div><div class="vp-value">{% if outside != nil %}{{ outside | round: 1 | replace: '.', ',' }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">Außensensor</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[7] }}</div><div class="vp-value">{% if supply != nil %}{{ supply | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[8] }}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[9] }}</div><div class="vp-value">{% if water != nil %}{{ water | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[10] }}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[11] }}</div><div class="vp-value">{% if outside != nil %}{{ outside | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[12] }}</div></div>
   </div>
   <div class="vp-bottom">
-    <div class="vp-chart"><div class="vp-label">Heizkurve</div>
+    <div class="vp-chart"><div class="vp-label">{{ labels[13] }}</div>
     {% if slope != nil and shift != nil %}
-      <svg viewBox="0 0 460 210" role="img" aria-label="Schematische Heizkurve, keine Viessmann-Sollwerte" preserveAspectRatio="xMidYMid meet">
+      <svg viewBox="0 0 460 210" role="img" aria-label="{{ labels[14] }}" preserveAspectRatio="xMidYMid meet">
         <defs><clipPath id="vp-clip"><rect x="42" y="18" width="398" height="146"/></clipPath></defs>
         <g fill="none" stroke="#000" stroke-width="1"><path d="M42 18V164H440"/>
           <path d="M42 128H440M42 91H440M42 55H440M141 18V164M241 18V164M340 18V164" stroke-dasharray="2 5"/>
         </g>
-        <g fill="#000" font-size="12" font-family="Arial,sans-serif"><text x="6" y="22">60 °C</text><text x="17" y="96">40</text><text x="17" y="168">20</text><text x="32" y="183">−20</text><text x="130" y="183">−10</text><text x="237" y="183">0</text><text x="334" y="183">10</text><text x="424" y="183">20</text><text x="190" y="204">Außentemperatur °C</text></g>
+        <g fill="#000" font-size="12" font-family="Arial,sans-serif"><text x="6" y="22">60 °C</text><text x="17" y="96">40</text><text x="17" y="168">20</text><text x="32" y="183">−20</text><text x="130" y="183">−10</text><text x="237" y="183">0</text><text x="334" y="183">10</text><text x="424" y="183">20</text><text x="190" y="204">{{ labels[15] }}</text></g>
         <polyline clip-path="url(#vp-clip)" fill="none" stroke="#000" stroke-width="3" points="{% for i in (0..40) %}{% assign x = i | times: 9.95 | plus: 42 %}{% assign delta = 40 | minus: i %}{% assign temp = delta | times: slope | plus: shift | plus: 20 %}{% assign y = 60 | minus: temp | times: 3.65 | plus: 18 %}{{ x }},{{ y }} {% endfor %}"/>
       </svg>
-      <div class="vp-note">Schema · keine Viessmann-Sollwerte</div>
-    {% else %}<div class="vp-empty">Heizkurve erscheint, sobald<br>Neigung und Niveau vorliegen.</div>{% endif %}
+      <div class="vp-note">{{ labels[16] }}</div>
+    {% else %}<div class="vp-empty">{{ labels[17] }}</div>{% endif %}
     </div>
-    <div class="vp-params"><div><div class="vp-label">Neigung</div><div class="vp-param">{% if slope != nil %}{{ slope | replace: '.', ',' }}{% else %}—{% endif %}</div></div><div><div class="vp-label">Niveau</div><div class="vp-param">{% if shift != nil %}{{ shift | replace: '.', ',' }} K{% else %}—{% endif %}</div></div><div><div class="vp-label">Betriebsart</div><div class="vp-note">{% case mode %}{% when 'dhwAndHeating' %}Heizen + Warmwasser{% when 'dhw' %}Nur Warmwasser{% when 'standby' %}Standby{% when 'heating' %}Heizen{% when nil %}Nicht verfügbar{% else %}{{ mode | escape }}{% endcase %}</div></div></div>
+    <div class="vp-params"><div><div class="vp-label">{{ labels[18] }}</div><div class="vp-param">{% if slope != nil %}{{ slope | replace: '.', decimal }}{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[19] }}</div><div class="vp-param">{% if shift != nil %}{{ shift | replace: '.', decimal }} K{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[20] }}</div><div class="vp-note">{% case mode %}{% when 'dhwAndHeating' %}{{ labels[21] }}{% when 'dhw' %}{{ labels[22] }}{% when 'standby' %}Standby{% when 'heating' %}{{ labels[23] }}{% when nil %}{{ labels[24] }}{% else %}{{ mode | escape }}{% endcase %}</div></div></div>
   </div>
-  <div class="vp-footer"><span>{% if oldest %}Ältester Wert: {{ oldest | date: '%d.%m. %H:%M' }} UTC{% else %}Messzeitpunkt fehlt{% endif %}</span><span>{% if found < 5 %}Werte unvollständig{% else %}Nur Anzeige{% endif %} · TRMNL X</span></div>
+  <div class="vp-footer"><span>{% if oldest %}{{ labels[25] }} {{ oldest | date: date_format }} UTC{% else %}{{ labels[26] }}{% endif %}</span><span>{% if found < 5 %}{{ labels[27] }}{% else %}{{ labels[28] }}{% endif %} · TRMNL X</span></div>
 </div>
