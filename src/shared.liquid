@@ -105,16 +105,10 @@
         {% for tick in curve.x_ticks %}<text x="{{ tick.x }}" y="178" text-anchor="middle" font-size="12">{{ tick.value | replace: '.', decimal }}</text>{% endfor %}
         <text x="6" y="14" font-size="12">°C</text><text x="235" y="204" text-anchor="middle" font-size="12">{{ labels[15] }}</text>
         <polyline fill="none" stroke="#000" stroke-width="3" points="{{ curve.polyline | escape }}"/>
-        {% for point in curve.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.label %}3{% else %}1.5{% endif %}" fill="#000"/>{% endfor %}
-        {% if curve.measured %}<path class="vp-measured-guide" d="M48 {{ curve.measured.y }}H{{ curve.measured.x }}V156" fill="none" stroke="#000" stroke-dasharray="3 3"/>{% endif %}
         {% if curve.target %}<path class="vp-target-marker" d="M{{ curve.target.x }} {{ curve.target.y | minus: 8 }}l8 8 -8 8 -8 -8Z" fill="#fff" stroke="#000" stroke-width="2"/>{% endif %}
-        {% if curve.measured %}<circle class="vp-supply-marker" cx="{{ curve.measured.x }}" cy="{{ curve.measured.y }}" r="5" fill="#000" stroke="#fff" stroke-width="1.5"/>{% endif %}
-        {% if curve.return %}<rect class="vp-return-marker" x="{{ curve.return.x | minus: 4 }}" y="{{ curve.return.y | minus: 4 }}" width="8" height="8" fill="#fff" stroke="#000" stroke-width="2"/>{% endif %}
         <g class="vp-curve-readings" font-family="Arial, sans-serif">
-          <circle cx="463" cy="29" r="5" fill="#000"/>
           <text x="477" y="33" font-size="13">{% case supply_scope %}{% when 'heat_pump' %}{{ labels[59] }}{% when 'circuit' %}{{ labels[60] }}{% else %}{{ labels[58] }}{% endcase %}</text>
           <text x="477" y="58" font-size="24" font-weight="bold">{% if supply != nil %}{{ supply | round: 1 | replace: '.', decimal }}{% else %}—{% endif %} °C</text>
-          <rect x="459" y="84" width="8" height="8" fill="#fff" stroke="#000" stroke-width="2"/>
           <text x="477" y="92" font-size="13">{% if return_reading.scope == 'heat_pump' %}{{ labels[66] }}{% else %}{{ labels[65] }}{% endif %}</text>
           <text x="477" y="117" font-size="24" font-weight="bold">{% if return_reading.value != nil %}{{ return_reading.value | round: 1 | replace: '.', decimal }}{% else %}—{% endif %} °C</text>
           <path d="M463 142l5 5 -5 5 -5 -5Z" fill="#fff" stroke="#000" stroke-width="2"/>

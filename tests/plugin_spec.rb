@@ -50,7 +50,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
-        expect(html.at_css('.vp-supply-marker')).not_to be_nil
+        expect(html.css('.vp-supply-marker, .vp-return-marker, .vp-measured-guide')).to be_empty
         expect(html.at_css('.vp-target-marker')).not_to be_nil
         expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty
         expect(html.css('path[stroke-dasharray="7 4"]')).to be_empty
@@ -59,7 +59,6 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-heating-block vp-block-active'])
         expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')
         expect(html.at_css('.vp-heating-block .vp-use-energy').text).to include('8 kWh', '35 kWh')
-        expect(html.at_css('.vp-return-marker')).not_to be_nil
         expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '27,1' : '27.1')
         expect(html.at_css('.vp-footer').text).to include('18.10.2026, 20:00')
         expect(html.at_css('.vp-footer').text).not_to match(/TRMNL|Read only|Nur Anzeige/)
@@ -184,11 +183,11 @@ RSpec.describe 'Viessmann heat pump' do
     expect(transform['supply_scope']).to eq('heat_pump')
   end
 
-  it 'keeps outlying measurements inside the plot without clamping the reading' do
+  it 'keeps outlying measurements in the side readings without changing the target-only plot' do
     feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 75
     result = transform
-    expect(result.dig('curve', 'measured', 'y')).to be_between(24, 156)
-    expect(result.dig('curve', 'ticks').last['value']).to be >= 75
+    expect(result.dig('curve', 'ticks').last['value']).to eq(55)
+    expect(document(render).at_css('.vp-curve-readings').text).to include('75 °C')
     expect(result.dig('curve', 'points').map { |point| point['supply'] }.max).to eq(50)
   end
 

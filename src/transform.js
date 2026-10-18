@@ -481,10 +481,8 @@ function run(input) {
   }
   if (points.length) {
     const outdoor = value(settings.outside_feature);
-    const measured = value(settings.supply_feature);
     const target = result.setpoints.supply;
-    const returnTemperature = result.return_reading.value;
-    const readings = [measured, target, returnTemperature].filter(number => number != null);
+    const readings = [target].filter(number => number != null);
     const minX = Math.min(points[0].outdoor, outdoor ?? points[0].outdoor);
     const maxX = Math.max(points[points.length - 1].outdoor, outdoor ?? points[points.length - 1].outdoor);
     const minY = Math.floor((Math.min(...points.map(point => point.supply), ...readings) - 2) / 5) * 5;
@@ -501,7 +499,7 @@ function run(input) {
       y: round(156 - (temperature - minY) / (maxY - minY) * 132)
     };
     result.curve = {
-      measured: marker(measured), target: marker(target), return: marker(returnTemperature),
+      target: marker(target),
       reference, room_setpoint: curveRoom, max_supply: !reference && limitsValid ? maxSupply : null, max_from_api: apiMax != null,
       cap_y: !reference && maxSupply != null && limitsValid ? round(156 - (maxSupply - minY) / (maxY - minY) * 132) : null,
       invalid_reference: Boolean(settings.curve_points) && !reference,
