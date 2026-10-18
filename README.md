@@ -162,7 +162,7 @@ Day counters use `currentDay` or the newest `day[0]` entry, with W/kW and Wh/kWh
 
 Missing features, unsupported units and disabled/error readings show a dash, not an invented zero. Thermal output is never inferred from electricity or COP, and day energy is not estimated by integrating infrequent power readings. Feature availability and update delays depend on the device and API plan; live availability for this installation still needs checking.
 
-Each energy reading has its own stale indicator; full/wide layouts also show its last-update time. **Current** means the latest API snapshot, not continuous monitoring. The default refresh is every 15 minutes. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
+Each energy reading has its own stale indicator; full/wide layouts also show its last-update time. For a heating + hot-water sum, timestamps and stale warnings identify the individual components. An unchanged hot-water counter can have an old timestamp while heating continues to update; this alone does not prove polling has failed. The plugin does not assume that an old component is inactive or up to date. **Current** means the latest API snapshot, not continuous monitoring. The default refresh is every 15 minutes. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
 
 ## Curve, targets and timestamps
 

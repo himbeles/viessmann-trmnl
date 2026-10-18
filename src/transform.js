@@ -173,7 +173,10 @@ function run(input) {
         const hasCooling = base === 'power.consumption' && coolingNames.some(name => rawFeature(name));
         const cooling = hasCooling ? firstDay(coolingNames) : null;
         if (heating && dhw && (!hasCooling || cooling)) {
-          daily = { amount: heating.amount + dhw.amount + (cooling?.amount ?? 0), timestamp: Math.min(heating.timestamp, dhw.timestamp, cooling?.timestamp ?? Infinity) };
+          const components = [{ scope: 'heating', ...heating }, { scope: 'dhw', ...dhw }];
+          if (cooling) components.push({ scope: 'cooling', ...cooling });
+          daily = { amount: heating.amount + dhw.amount + (cooling?.amount ?? 0),
+            timestamp: Math.min(...components.map(item => item.timestamp)), components };
           dailyScope = hasCooling ? 'heating_dhw_cooling' : 'heating_dhw';
         }
       }
@@ -183,6 +186,12 @@ function run(input) {
       metrics.today_scope = dailyScope;
       metrics.today_updated = formatTime(daily.timestamp);
       metrics.today_stale = now - daily.timestamp > settings.stale_minutes * 60000;
+      if (daily.components) {
+        metrics.today_components = daily.components.map(item => ({
+          scope: item.scope, updated: formatTime(item.timestamp),
+          stale: now - item.timestamp > settings.stale_minutes * 60000
+        }));
+      }
     } else {
       metrics.today_outdated = outdatedEnergy;
     }

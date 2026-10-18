@@ -294,6 +294,76 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.dig('heat', 'today_kwh')).to be_nil
   end
 
+  def combined_heat(heating_stamp: '2026-10-18T18:00:00Z', dhw_stamp: '2026-10-18T10:00:00Z')
+    remove_energy_totals
+    data['data'] << reading('heating.heat.production.summary.heating', 'currentDay', 28, timestamp: heating_stamp)
+    data['data'] << reading('heating.heat.production.summary.dhw', 'currentDay', 7, timestamp: dhw_stamp)
+  end
+
+  it 'identifies an old DHW component without concealing the conservative age of the sum' do
+    combined_heat
+    heat = transform.fetch('heat')
+    expect(heat).to include('today_kwh' => 35, 'today_scope' => 'heating_dhw', 'today_stale' => true)
+    expect(heat.fetch('today_components')).to contain_exactly(
+      include('scope' => 'heating', 'stale' => false, 'updated' => include('20:00')),
+      include('scope' => 'dhw', 'stale' => true, 'updated' => include('12:00'))
+    )
+    expect(heat.fetch('today_updated')).to include('12:00')
+    feature('heating.heat.production.summary.heating')['properties']['currentDay']['value'] = 30
+    expect(transform.dig('heat', 'today_kwh')).to eq(37)
+  end
+
+  it 'identifies old heating independently of a fresh hot-water counter' do
+    combined_heat(heating_stamp: '2026-10-18T10:00:00Z', dhw_stamp: '2026-10-18T18:00:00Z')
+    expect(transform.dig('heat', 'today_components')).to contain_exactly(
+      include('scope' => 'heating', 'stale' => true), include('scope' => 'dhw', 'stale' => false)
+    )
+  end
+
+  it 'keeps both age warnings when both components are old' do
+    combined_heat(heating_stamp: '2026-10-18T10:00:00Z')
+    expect(transform.dig('heat', 'today_components')).to all(include('stale' => true))
+  end
+
+  it 'withholds a combined total if either component is from yesterday' do
+    combined_heat(dhw_stamp: '2026-10-17T18:00:00Z')
+    expect(transform.fetch('heat')).to include('today_kwh' => nil, 'today_outdated' => true)
+    expect(transform.dig('heat', 'today_components')).to be_nil
+  end
+
+  it 'preserves component metadata for electricity including cooling' do
+    remove_energy_totals
+    %w[heating dhw cooling].each do |scope|
+      data['data'] << reading("heating.power.consumption.summary.#{scope}", 'currentDay', 2)
+    end
+    energy = transform.fetch('energy')
+    expect(energy).to include('today_kwh' => 6, 'today_scope' => 'heating_dhw_cooling', 'today_stale' => false)
+    expect(energy.fetch('today_components').map { |component| component['scope'] }).to eq(%w[heating dhw cooling])
+    expect(energy.fetch('today_components')).to all(include('stale' => false))
+  end
+
+  it 'keeps device-total timestamps and age unchanged' do
+    feature('heating.heat.production.total')['timestamp'] = '2026-10-18T10:00:00Z'
+    expect(transform.fetch('heat')).to include('today_kwh' => 48.6, 'today_scope' => 'device', 'today_stale' => true)
+    expect(transform.dig('heat', 'today_components')).to be_nil
+  end
+
+  %w[en de].each do |language|
+    %w[full half_horizontal half_vertical quadrant].each do |view|
+      it "shows the old component explicitly in #{language} #{view}" do
+        combined_heat
+        screen = render(view, language)
+        expect(screen).to have_no_transform_error.and(have_no_leaked_text)
+        heat_tile = document(screen).css('.vp-energy > div')[3]
+        note = heat_tile.at_css('.vp-energy-note').text.gsub(/\s+/, ' ').strip
+        expect(note).to include(language == 'de' ? 'Warmwasser: Daten veraltet' : 'Hot water: Stale data')
+        expect(note).not_to include(language == 'de' ? 'Heizung: Daten veraltet' : 'Heating: Stale data')
+        expect(heat_tile.at_css('.vp-energy-asof').text).to include('20:00', '12:00')
+        expect(heat_tile.at_css('.vp-energy-value').text).to include('35')
+      end
+    end
+  end
+
   it 'keeps the existing plugin target and the two different hosted OAuth encodings' do
     settings = YAML.load_file(File.join(__dir__, '..', 'src', 'settings.yml'))
     expect(settings).to include('id' => 510867, 'strategy' => 'polling', 'serverless_language' => 'node',
