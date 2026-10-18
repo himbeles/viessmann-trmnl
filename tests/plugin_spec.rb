@@ -49,6 +49,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-heating-block .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
+        expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
         expect(html.at_css('.vp-supply-marker')).not_to be_nil
         expect(html.at_css('.vp-target-marker')).not_to be_nil
         expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty

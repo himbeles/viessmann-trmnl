@@ -145,7 +145,7 @@ The dashboard groups information into three bordered blocks:
 
 - **Heating:** outdoor temperature, heating-water pressure and room setpoint at the top; the capped heating curve with current supply, return and supply-target markers; slope/offset and daily energy figures with gray values and black labels for heating.
 - **Hot water:** cylinder temperature, configured target and daily energy figures with gray values and black labels for hot water.
-- **Power & energy:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
+- **Total / Gesamt:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
 
 The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset. The top-right badge shows **Hot water**, **Heating** or **Off** (**Warmwasser**, **Heizung**, **Aus**). Active `heating.dhw.charging.properties.active.value` takes priority. Otherwise the plugin reads `heating.secondaryCircuit.operation.state.properties.currentValue.value`, not `targetValue` or the configured operating mode. `standby`/`off` means off even if circulation continues. When current operation is heating and `heating.valves.fourThreeWay.position` reports `domesticHotWater`, the badge shows hot water. Valve position alone does not prove activity. On devices without current operation, known charging=false plus the selected circuit's circulation status can identify heating/off. Unsupported or incomplete signals show **Status unknown**; cooling/defrost are not silently reported as off.
 
