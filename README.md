@@ -154,6 +154,8 @@ All four layouts keep these quantities separate:
 | Heat output now / Wärme aktuell | kW | Thermal output at the latest API update. |
 | Heat today / Wärme heute | kWh | Cumulative thermal energy for the running device day. |
 
+The documented device-wide heat-energy field is `heating.heat.production.total`. Viessmann's [data-point catalogue](https://api.viessmann-climatesolutions.com/documentation/data-points) classifies it as Advanced Feature Data; `heating.heat.production.summary.heating` and `.summary.dhw` are Basic Feature Data. When the total is unavailable, the plugin adds the two basic counters' `properties.currentDay.value` readings and labels the result **Heating + hot water**. Device/account availability must be checked against the actual feature response. See the [field research](auxiliary/api-energy-fields.md) for sources and distinctions between documented features and compatibility aliases.
+
 Current readings prefer whole-device features and fall back to compressor 0 where available. A **Compressor** label means that other consumers or heat sources, such as pumps or the auxiliary heater, are not included. Do not treat that value as a whole-system measurement.
 
 Daily readings prefer an API total and never add it to its own component counters. When no total is available, the plugin adds heating and DHW counters and labels the scope. Electrical totals also include a cooling counter when one is present and valid; the heating/DHW heat fallback excludes cooling. The API's reported total is used as reported.
@@ -176,7 +178,7 @@ Heating and hot-water tiles include target values. A configured supply-target fe
 
 **Why “Daten veraltet” appeared:** the previous implementation used the oldest timestamp across sensors, curve settings and mode. An unchanged curve or mode could therefore make the dashboard appear stale. Freshness now uses only valid supply, hot-water and outdoor sensor timestamps. Changing the time zone affects presentation, not age. A sensor's own API timestamp may still describe its last change rather than a new sample; an old timestamp alone does not prove the device is disconnected. Missing sensor timestamps are identified separately.
 
-Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Invalid zones fall back to UTC.
+Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Invalid zones fall back to UTC. Time-zone abbreviations and offsets are hidden on the display; conversion and day-boundary checks still use the configured zone.
 
 ## Troubleshooting
 

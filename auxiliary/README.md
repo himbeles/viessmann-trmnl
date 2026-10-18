@@ -67,12 +67,12 @@ The serverless script reads these feature candidates directly from the polled re
 |---|---|---|
 | Current electricity | `heating.power.consumption.current`, then `heating.compressors.0.power.consumption.current` | `properties.value`, W/kW |
 | Current heat output | `heating.heat.production.current`, then `heating.compressors.0.heat.production.current` | `properties.value`, W/kW |
-| Daily electricity total | `heating.power.consumption.summary.total`, `.total`, `.summary` | `properties.currentDay` or newest `properties.day.value[0]`, Wh/kWh |
-| Daily heat total | `heating.heat.production.summary.total`, `.total`, `.summary` | Same day properties, Wh/kWh |
+| Daily electricity total | `heating.power.consumption.total` | `properties.currentDay` or newest `properties.day.value[0]`, Wh/kWh |
+| Daily heat total | `heating.heat.production.total` | Same day properties, Wh/kWh |
 | Electricity component fallback | `heating.power.consumption.summary.heating` + `.summary.dhw`, plus `.summary.cooling` if present | `properties.currentDay`; legacy `consumption.heating/dhw/cooling` day arrays also supported |
 | Heat component fallback | `heating.heat.production.summary.heating` + `.summary.dhw` | `properties.currentDay`; legacy `production.heating/dhw` day arrays also supported |
 
-Shortened feature names in this table retain their family's full prefix. These are supported candidates, not a claim that the account exposes all of them. Optional `current_power_feature`, `daily_energy_feature`, `current_heat_feature` and `daily_heat_feature` settings select explicit features. Electrical overrides must remain in the `.power.consumption.` family and thermal overrides in `.heat.production.`. Compressor or auxiliary-heater overrides are labelled as components. A scalar daily feature ending in `.day` is also supported through `properties.value`.
+The `.total` paths are the documented device-wide statistics and are tried first. `.summary.total` and bare `.summary` are retained as compatibility aliases only; the current catalogue does not document them as daily total features. See [API field research](api-energy-fields.md). Shortened feature names in this table retain their family's full prefix. These are supported candidates, not a claim that the account exposes all of them. Optional `current_power_feature`, `daily_energy_feature`, `current_heat_feature` and `daily_heat_feature` settings select explicit features. Electrical overrides must remain in the `.power.consumption.` family and thermal overrides in `.heat.production.`. Compressor or auxiliary-heater overrides are labelled as components. A scalar daily feature ending in `.day` is also supported through `properties.value`.
 
 Totals are preferred over components to avoid double counting. Missing heating/DHW components are not silently substituted with zero; an electrical cooling component that exists but is unusable prevents an incomplete sum. Cooling is excluded from the heating/DHW heat fallback. Each daily counter must have a valid feature timestamp on the same local date as the current render; yesterday and unknown dates are withheld. A same-day old timestamp may still show a value with its own stale warning. Combined totals expose `today_components`, with scope, local timestamp and age flag for each included counter. The UI identifies the old component rather than labelling the entire sum stale; the conservative combined `today_updated`/`today_stale` metadata still uses the oldest component. No new timestamp or energy value is invented.
 
@@ -98,7 +98,7 @@ These are calculated curve values from live settings, not a verified direct expo
 
 Freshness uses only valid supply, hot-water and outdoor sensor timestamps, ignoring curve, operating-mode and target-setting timestamps. This fixes false stale warnings caused by unchanged configuration. The default threshold remains 120 minutes. Sensor timestamps may themselves represent last changes rather than regular measurements, so their age does not prove an outage.
 
-Timestamps are formatted in the configured `time_zone`, defaulting to `Europe/Berlin`. Standard IANA zones and daylight-saving transitions are handled using `Intl.DateTimeFormat`; invalid zones fall back to UTC. Staleness always compares absolute timestamps and is unaffected by the display zone. An offline E-Ink screen cannot update its timestamp or stale badge until a new screen is rendered.
+Timestamps are formatted in the configured `time_zone`, defaulting to `Europe/Berlin`. Standard IANA zones and daylight-saving transitions are handled using `Intl.DateTimeFormat`; invalid zones fall back to UTC. Zone abbreviations are omitted from rendered timestamps; conversion, DST handling and date checks are unchanged. Staleness always compares absolute timestamps and is unaffected by the display zone. An offline E-Ink screen cannot update its timestamp or stale badge until a new screen is rendered.
 
 ## Official references
 

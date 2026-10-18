@@ -107,7 +107,7 @@ custom_fields:
     name: "API feature: heat delivered today (optional)"
     field_type: string
     optional: true
-    description: "Blank: prefer device heat-production total, otherwise heating +
+    description: "Blank: prefer heating.heat.production.total when exposed, otherwise heating +
       DHW. Requires a currentDay/day[0] counter with Wh/kWh units and a
       timestamp from today."
 polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{

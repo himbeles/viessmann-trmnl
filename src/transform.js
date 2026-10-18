@@ -83,7 +83,7 @@ function run(input) {
   settings.time_zone = timeZone;
   const formatTime = timestamp => timestamp === null || !Number.isFinite(timestamp) ? null : new Intl.DateTimeFormat(
     settings.language === 'de' ? 'de-DE' : 'en-GB',
-    { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short' }
+    { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
   ).format(timestamp);
   result.freshness = {
     oldest_sensor: formatTime(oldest), time_zone: timeZone,
@@ -165,7 +165,8 @@ function run(input) {
       else if (dailyFeature.endsWith('.dhw')) dailyScope = 'dhw';
       else if (dailyFeature.endsWith('.cooling')) dailyScope = 'cooling';
     } else {
-      daily = firstDay([`heating.${base}.summary.total`, `heating.${base}.total`, `heating.${base}.summary`]);
+      // The official catalogue names .total; retain older aliases only for compatibility.
+      daily = firstDay([`heating.${base}.total`, `heating.${base}.summary.total`, `heating.${base}.summary`]);
       if (!daily) {
         const heating = firstDay([`heating.${base}.summary.heating`, `heating.${base}.heating`]);
         const dhw = firstDay([`heating.${base}.summary.dhw`, `heating.${base}.dhw`]);

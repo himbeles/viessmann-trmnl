@@ -36,6 +36,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         html = document(screen)
         expect(html.at_css('.vp')['lang']).to eq(language)
+        expect(html.at_css('.vp').text).not_to match(/\b(?:CEST|CET|MESZ|MEZ|UTC|GMT)\b/)
         expect(html.at_css('.vp-metrics').text).to include(language == 'de' ? '32,4' : '32.4')
         expect(html.at_css('.vp-mode').text).to include(language == 'de' ? 'Heizen + Warmwasser' : 'Heating + hot water')
         expect(html.at_css('.vp-energy').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '12.34'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
@@ -362,6 +363,23 @@ RSpec.describe 'Viessmann heat pump' do
         expect(heat_tile.at_css('.vp-energy-value').text).to include('35')
       end
     end
+  end
+
+  it 'prefers the documented total feature over compatibility aliases' do
+    data['data'] << reading('heating.power.consumption.total', 'day', [17, 24])
+    data['data'] << reading('heating.heat.production.summary.total', 'currentDay', 99)
+    result = transform
+    expect(result.fetch('energy')).to include('today_kwh' => 17, 'today_scope' => 'device')
+    expect(result.fetch('heat')).to include('today_kwh' => 48.6, 'today_scope' => 'device')
+  end
+
+  it 'retains local time conversion while omitting zone indicators on component timestamps' do
+    combined_heat
+    result = transform(language: 'de', time_zone: 'Europe/Berlin')
+    expect(result.dig('freshness', 'oldest_sensor')).to eq('18.10.2026, 20:00')
+    expect(result.dig('heat', 'today_components').map { |item| item['updated'] }).to eq([
+      '18.10.2026, 20:00', '18.10.2026, 12:00'
+    ])
   end
 
   it 'keeps the existing plugin target and the two different hosted OAuth encodings' do
