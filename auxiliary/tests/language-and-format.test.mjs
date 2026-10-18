@@ -66,7 +66,7 @@ test('known operating modes are localized in both languages', async () => {
 
 test('root uses the official five plugin files with English settings and a language selector', async () => {
   const entries = (await readdir(root)).filter(name => !name.startsWith('.'));
-  assert.deepEqual(entries.sort(), ['auxiliary', 'settings.yml', ...layouts.map(name => `${name}.liquid`)].sort());
+  assert.deepEqual(entries.sort(), ['README.md', 'auxiliary', 'settings.yml', ...layouts.map(name => `${name}.liquid`)].sort());
   const settings = YAML.parse(await readFile(new URL('settings.yml', root), 'utf8'));
   assert.equal(settings.name, 'Viessmann heat pump');
   assert.equal(settings.strategy, 'polling');
