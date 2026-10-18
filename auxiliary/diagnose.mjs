@@ -37,12 +37,19 @@ try {
   const fields = typeof rawFields === 'string' ? YAML.parse(rawFields) : rawFields || [];
   const values = settings.custom_fields_values || {};
   const digest = value => createHash('sha256').update(value || '').digest('hex');
+  const configuration = await api('configuration');
   const details = await api('details');
   const status = await api('logs?limit=1');
   const merge = await api('merge_variables');
   const describe = value => Array.isArray(value) ? { type: 'array', length: value.length }
     : value && typeof value === 'object' ? { type: 'object', keys: Object.keys(value) } : { type: typeof value };
   console.log(JSON.stringify({
+    connection_states: (configuration.connections || []).map(connection => ({
+      keys: Object.keys(connection), id: connection.id, state: connection.state, status: connection.status,
+      connected: connection.connected, last_attempt_state: connection.last_attempt?.state
+    })),
+    secret_presence: configuration.secrets,
+    readiness: configuration.readiness,
     live_state: details.state,
     live_oauth_enabled: details.settings?.oauth_enabled,
     live_pkce_enabled: details.settings?.oauth_pkce_enabled,
