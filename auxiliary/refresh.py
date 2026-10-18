@@ -50,7 +50,7 @@ def main():
         'last_refresh': health.get('last_refresh'),
         'error_http_codes': re.findall(r'HTTP\s+(\d{3})', str(health.get('error_message') or '') + json.dumps(result.get('logs', []))),
     }, indent=2), flush=True)
-    if result.get('success') is not True or result.get('warning'):
+    if result.get('success') is not True or result.get('warning') or health.get('state') != 'active':
         raise RuntimeError('Live polling verification failed. Inspect the plugin status on TRMNL.')
 
 

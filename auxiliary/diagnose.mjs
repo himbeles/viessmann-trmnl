@@ -12,6 +12,16 @@ const key = process.env.TRMNL_API_KEY;
 if (!key) throw new Error('TRMNL_API_KEY is required.');
 const directory = await mkdtemp(join(tmpdir(), 'trmnl-diagnostic-'));
 const present = value => value != null && String(value).trim() !== '';
+async function api(path) {
+  return new Promise((resolve, reject) => {
+    const child = execFile('curl', ['--fail', '--silent', '--show-error', '--config', '-',
+      `https://trmnl.com/api/plugin_settings/${id}/${path}`], { maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
+      if (error) reject(new Error(`TRMNL diagnostic request failed: ${path}`));
+      else { try { resolve(JSON.parse(stdout).data); } catch { reject(new Error('Invalid diagnostic response.')); } }
+    });
+    child.stdin.end(`header = "Authorization: Bearer ${key.replaceAll('"', '\\"')}"\n`);
+  });
+}
 try {
   const archive = join(directory, 'plugin.zip');
   // Header is passed on stdin rather than as a command-line argument.
@@ -27,7 +37,20 @@ try {
   const fields = typeof rawFields === 'string' ? YAML.parse(rawFields) : rawFields || [];
   const values = settings.custom_fields_values || {};
   const digest = value => createHash('sha256').update(value || '').digest('hex');
+  const details = await api('details');
+  const status = await api('logs?limit=1');
+  const merge = await api('merge_variables');
+  const describe = value => Array.isArray(value) ? { type: 'array', length: value.length }
+    : value && typeof value === 'object' ? { type: 'object', keys: Object.keys(value) } : { type: typeof value };
   console.log(JSON.stringify({
+    live_state: details.state,
+    live_settings_keys: Object.keys(details.settings || {}),
+    available_fields: describe(details.available_fields),
+    form_fields: Array.isArray(details.form_fields) ? details.form_fields.map(field => ({ keyname: field.keyname, name: field.name, field_type: field.field_type })) : describe(details.form_fields),
+    health_state: status.health?.state,
+    retry_count: status.health?.error_retry_count,
+    last_refresh: status.health?.last_refresh,
+    variables_structure: Object.fromEntries(Object.entries(merge.variables || {}).map(([name, value]) => [name, describe(value)])),
     id: settings.id,
     exported_keys: Object.keys(settings),
     strategy: settings.strategy,
