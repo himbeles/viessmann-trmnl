@@ -31,7 +31,15 @@ export function mergeSettings(template, installed, expectedId) {
       ...(previous && Object.hasOwn(previous, 'default') ? { default: previous.default } : {})
     });
   }
-  return { ...installed, id: expectedId, serverless_language: 'node', custom_fields: [...definitions.values()] };
+  // TRMNL exports can omit sensitive polling headers. Re-importing the empty
+  // value removes authentication. Restore only our public OAuth token template;
+  // actual credentials and tokens continue to live on the installed instance.
+  const pollingHeaders = typeof installed.polling_headers === 'string' && installed.polling_headers.trim()
+    ? installed.polling_headers : template.polling_headers;
+  if (!pollingHeaders) throw new Error('No polling authentication header is available; refusing to upload.');
+  return { ...installed, id: expectedId, polling_headers: pollingHeaders,
+    oauth_pkce_enabled: template.oauth_pkce_enabled ?? installed.oauth_pkce_enabled,
+    serverless_language: 'node', custom_fields: [...definitions.values()] };
 }
 
 function command(args, cwd) {

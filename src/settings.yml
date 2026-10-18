@@ -113,7 +113,7 @@ custom_fields:
 polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{
   installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode
   }}/devices/{{ device_id | url_encode }}/features/
-polling_headers: "Authorization: Bearer {{ oauth_access_token }}"
+polling_headers: "Authorization=Bearer {{ oauth_access_token }}"
 polling_verb: GET
 serverless_language: node
 oauth_enabled: "true"

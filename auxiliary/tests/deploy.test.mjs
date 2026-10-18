@@ -30,6 +30,24 @@ test('updating an existing instance retains OAuth, polling and configured values
   assert.deepEqual(installed, before);
 });
 
+test('Viessmann PKCE remains enabled even when the exported instance disabled it', () => {
+  for (const value of [false, 'false', 'no', '', null, undefined]) {
+    const merged = mergeSettings({ oauth_pkce_enabled: 'true', polling_headers: 'Authorization=Bearer {{ oauth_access_token }}' },
+      { id: 510867, oauth_pkce_enabled: value }, 510867);
+    assert.equal(merged.oauth_pkce_enabled, 'true');
+  }
+});
+
+test('redacted export headers are restored from the public OAuth template', () => {
+  const header = 'Authorization=Bearer {{ oauth_access_token }}';
+  for (const redacted of [undefined, null, '', '  ']) {
+    const merged = mergeSettings({ polling_headers: header }, { id: 510867, polling_headers: redacted }, 510867);
+    assert.equal(merged.polling_headers, header);
+    assert.ok(!Object.hasOwn(merged, 'oauth_access_token'));
+  }
+  assert.throws(() => mergeSettings({}, { id: 510867, polling_headers: '' }, 510867), /authentication header/);
+});
+
 test('missing or mismatched IDs and unexpected fields abort an update', () => {
   for (const installed of [{}, { id: 1 }, { id: 510867, custom_fields: 'not an array' }]) {
     assert.throws(() => mergeSettings({ custom_fields: [] }, installed, 510867));

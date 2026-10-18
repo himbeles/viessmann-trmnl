@@ -27,7 +27,7 @@ The existing target is [plugin **510867**](https://trmnl.com/plugin_settings/510
 
 The workflow builds and tests the plugin, runs the official linter, builds a synthetic-data preview using the official Liquid runtime, and creates an import ZIP artifact. Once the key is configured, it updates the existing plugin. Without the secret, verification runs and deployment is explicitly skipped with a notice.
 
-The updater first uses `trmnlp clone` to download the current instance into an ignored temporary directory. It retains installed polling settings, OAuth settings, custom-field values and configured defaults, merges updated form definitions, and replaces the layouts and Node transform. After linting, it calls `trmnlp push --id 510867 --force`. It refuses a missing or mismatched plugin ID and deletes the temporary export afterward. Credentials are not added to repository source files.
+The updater first uses `trmnlp clone` to download the current instance into an ignored temporary directory. It retains installed polling settings, OAuth settings, custom-field values and configured defaults, merges updated form definitions, and replaces the layouts and Node transform. After linting, it calls `trmnlp push --id 510867 --force`. It refuses a missing or mismatched plugin ID and deletes the temporary export afterward. TRMNL exports may redact polling headers; if the exported header is empty, the updater restores the public `Authorization=Bearer {{ oauth_access_token }}` template. The updater also enforces PKCE for Viessmann, even if the exported setting is disabled. Tokens and client credentials remain on TRMNL and are not added to repository source files.
 
 The setup can be tested without a TRMNL key; live synchronization requires that key and has to be confirmed by the deployment job. Do not use **Import new** for routine updates to this connected instance.
 
@@ -93,7 +93,7 @@ The packager includes `settings.yml`, the four Liquid layouts and `transform.js`
 
 Check **Enable PKCE? → Yes** in the saved TRMNL settings, even after importing. If authorization reports **code challenge required**, enable PKCE, save, and start a new connection from TRMNL instead of refreshing the old authorization page.
 
-The plugin uses **Polling**, **GET**, and `Authorization: Bearer {{ oauth_access_token }}`. The default refresh interval is **60 minutes**, not seconds. No Home Assistant or additional server is required by this design. Live OAuth, token renewal and physical device rendering still need verification with your account.
+The plugin uses **Polling**, **GET**, and `Authorization=Bearer {{ oauth_access_token }}`. The default refresh interval is **60 minutes**, not seconds. No Home Assistant or additional server is required by this design. Live OAuth, token renewal and physical device rendering still need verification with your account.
 
 ## Configuration fields
 
