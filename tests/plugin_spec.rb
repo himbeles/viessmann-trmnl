@@ -56,7 +56,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.css('.vp-x-tick').size).to eq(6)
         expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty
         expect(html.css('path[stroke-dasharray="7 4"]')).to be_empty
-        expect(html.css('.vp-params > div').size).to eq(3)
+        expect(html.css('.vp-chart .vp-params > div').size).to eq(2)
         expect(html.at_css('.vp-heating-block > .vp-metrics .vp-room-target').text).to include('22')
         expect(html.css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-heating-block vp-block-active'])
         expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')
@@ -238,6 +238,31 @@ RSpec.describe 'Viessmann heat pump' do
     feature('heating.sensors.temperature.return')['properties']['value']['value'] = 44.2
     expect(transform.fetch('return_reading')).to include('value' => nil, 'scope' => 'circuit')
     expect(document(render).at_css('.vp-curve-readings').text).not_to include('44.2')
+  end
+
+  %w[heating dhw standby cooling].each do |state|
+    it "shows flow/return only for the active use in state #{state}" do
+      feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = state
+      data['data'] << { 'feature' => 'heating.dhw.sensors.temperature.tankLoadSystem.supply', 'properties' => { 'value' => { 'value' => 47 } } }
+      data['data'] << { 'feature' => 'heating.dhw.sensors.temperature.tankLoadSystem.return', 'properties' => { 'value' => { 'value' => 42 } } }
+      values = transform.fetch('temperatures')
+      expect(values.fetch('heating')).to include('supply' => state == 'heating' ? 32.4 : nil, 'return' => state == 'heating' ? 27.1 : nil)
+      expect(values.fetch('dhw')).to include('supply' => state == 'dhw' ? 47 : nil, 'return' => state == 'dhw' ? 42 : nil)
+      html = document(render)
+      supply = html.css('.vp-curve-readings text')[1].text
+      expect(supply).to include(state == 'heating' ? '32.4' : '—')
+      expect(html.at_css('.vp-water-flows').text).to include(state == 'dhw' ? '47 °C' : '— °C')
+      expect(html.at_css('.vp-curve-readings').text).to include('32.4') # target stays visible
+    end
+  end
+
+  it 'requires active selected-circuit circulation and never substitutes cylinder temperature for flow' do
+    feature('heating.circuits.0.circulation.pump')['properties']['status']['value'] = 'off'
+    expect(transform.dig('temperatures', 'heating', 'supply')).to be_nil
+    expect(document(render).css('.vp-heating-block.vp-block-active')).to be_empty
+    feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'dhw'
+    expect(transform.fetch('temperatures').fetch('dhw')).to include('supply' => nil, 'return' => nil)
+    expect(document(render).at_css('.vp-water-flows').text).not_to include('48.2')
   end
 
   it 'reads daily heating and water separately alongside whole-device totals' do

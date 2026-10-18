@@ -47,6 +47,8 @@ function run(input) {
   const program = text(active?.properties?.value?.value, null, 80);
   fields.set(`${prefix}.circulation.pump`, ['status']);
   fields.set('heating.dhw.charging', ['active', 'status']);
+  fields.set('heating.dhw.sensors.temperature.tankLoadSystem.supply', ['value', 'status']);
+  fields.set('heating.dhw.sensors.temperature.tankLoadSystem.return', ['value', 'status']);
   fields.set('heating.secondaryCircuit.operation.state', ['currentValue', 'status']);
   fields.set('heating.valves.fourThreeWay.position', ['value', 'status']);
   fields.set('heating.sensors.pressure.supply', ['value', 'status']);
@@ -110,6 +112,15 @@ function run(input) {
   else if (operation == null && pumpStatus === 'on' && charging === false) activity = 'heating';
   else if (operation == null && pumpStatus === 'off' && charging === false) activity = 'off';
   result.activity = { state: activity };
+  const heatingActive = activity === 'heating' && pumpStatus === 'on';
+  const dhwActive = activity === 'dhw';
+  const dhwSupply = 'heating.dhw.sensors.temperature.tankLoadSystem.supply';
+  const dhwReturn = 'heating.dhw.sensors.temperature.tankLoadSystem.return';
+  result.temperatures = {
+    heating: { active: heatingActive, supply: heatingActive ? value(settings.supply_feature) : null,
+      return: heatingActive ? result.return_reading.value : null },
+    dhw: { active: dhwActive, supply: dhwActive ? value(dhwSupply) : null, return: dhwActive ? value(dhwReturn) : null }
+  };
   result.setpoints = { room, supply: value(settings.supply_setpoint_feature) ?? value(`${prefix}.temperature`), water: value(settings.water_setpoint_feature) };
 
   // Configuration timestamps describe setting changes, not sensor freshness.
@@ -288,11 +299,16 @@ function run(input) {
     stale: oldest !== null && now > 0 && now - oldest > settings.stale_minutes * 60000
   };
 
-  const displayTimes = [...knownTimes];
+  const displayTimes = sensors.filter(item => item.feature !== settings.supply_feature || heatingActive)
+    .map(item => Date.parse(item.timestamp)).filter(Number.isFinite);
   const rememberTime = timestamp => {
     if (Number.isFinite(timestamp)) displayTimes.push(timestamp);
   };
-  if (result.return_reading.value != null) rememberTime(Date.parse(valid(selectedReturn)?.timestamp));
+  if (result.temperatures.heating.return != null) rememberTime(Date.parse(valid(selectedReturn)?.timestamp));
+
+  if (dhwActive) for (const name of [dhwSupply, dhwReturn]) {
+    if (value(name) != null) rememberTime(Date.parse(valid(name)?.timestamp));
+  }
 
   // Electrical input and thermal output are separate quantities, never inferred from COP.
   const convert = (property, quantity) => {

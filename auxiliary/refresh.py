@@ -59,6 +59,7 @@ def main():
         'feature_count': feature_count,
         'dashboard_signals': {
             'active_circuit': variables.get('activity', {}).get('state'),
+            'displayed_temperatures': variables.get('temperatures'),
             'pressure_bar': variables.get('pressure', {}).get('bar'),
             'return_temperature_c': variables.get('return_reading', {}).get('value'),
             'return_scope': variables.get('return_reading', {}).get('scope'),
