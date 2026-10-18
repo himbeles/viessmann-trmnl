@@ -37,13 +37,21 @@ try {
   const fields = typeof rawFields === 'string' ? YAML.parse(rawFields) : rawFields || [];
   const values = settings.custom_fields_values || {};
   const digest = value => createHash('sha256').update(value || '').digest('hex');
-  const configuration = await api('configuration');
+  const configuration = await api('configuration').catch(() => ({}));
   const details = await api('details');
-  const status = await api('logs?limit=1');
+  const status = await api('logs?limit=10');
+  const logText = JSON.stringify(status.logs || []);
+  const logSignals = {
+    http_codes: [...logText.matchAll(/HTTP\s+(\d{3})/g)].map(match => match[1]),
+    known_errors: ['invalid_grant', 'invalid_client', 'invalid_token', 'unauthorized', 'expired', 'refresh_token', 'access token', 'Authorization', 'Bearer', 'oauth_access_token'].filter(value => logText.toLowerCase().includes(value.toLowerCase())),
+    unresolved_token_placeholder: logText.includes('{{ oauth_access_token }}'),
+    bearer_value_lengths: [...logText.matchAll(/Bearer\s+([^\s"\\,}]+)/g)].map(match => match[1].length)
+  };
   const merge = await api('merge_variables');
   const describe = value => Array.isArray(value) ? { type: 'array', length: value.length }
     : value && typeof value === 'object' ? { type: 'object', keys: Object.keys(value) } : { type: typeof value };
   console.log(JSON.stringify({
+    log_signals: logSignals,
     connection_states: (configuration.connections || []).map(connection => ({
       keys: Object.keys(connection), id: connection.id, state: connection.state, status: connection.status,
       connected: connection.connected, last_attempt_state: connection.last_attempt?.state

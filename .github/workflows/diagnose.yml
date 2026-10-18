@@ -25,4 +25,9 @@ jobs:
         if: inputs.refresh
         env:
           TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
-        run: python3 auxiliary/refresh.py
+        run: python3 auxiliary/refresh.py --debug
+      - name: Inspect polling result without displaying request credentials
+        if: always() && inputs.refresh
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+        run: node auxiliary/diagnose.mjs

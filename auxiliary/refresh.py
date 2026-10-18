@@ -27,6 +27,8 @@ def request(path, method='GET', data=None):
 
 
 def main():
+    if '--debug' in sys.argv:
+        request('/debug_logs', 'POST')
     # The archive importer and the settings form use different boolean values.
     # Write the hosted fields explicitly; never touch saved credentials/tokens.
     request('/settings', 'PATCH', {'fields': {
