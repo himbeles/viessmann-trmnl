@@ -54,7 +54,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-target-marker')).not_to be_nil
         expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty
         expect(html.css('path[stroke-dasharray="7 4"]')).to be_empty
-        expect(html.css('.vp-params > div').size).to eq(2)
+        expect(html.css('.vp-params > div').size).to eq(3)
         expect(html.at_css('.vp-heating-block > .vp-metrics .vp-room-target').text).to include('22')
         expect(html.css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-heating-block vp-block-active'])
         expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')

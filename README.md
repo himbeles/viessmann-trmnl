@@ -143,7 +143,7 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 
 The dashboard groups information into three bordered blocks:
 
-- **Heating:** outdoor temperature, heating-water pressure and room setpoint at the top; the capped heating curve with the target marker and supply/return readings beside the plot; slope/offset and daily energy figures with gray values and black labels for heating.
+- **Heating:** outdoor temperature and room setpoint at the top; heating-water pressure and small slope/offset details at the bottom; the capped heating curve with the target marker and supply/return readings beside the plot; slope/offset and daily energy figures with gray values and black labels for heating.
 - **Hot water:** cylinder temperature, configured target and daily energy figures with gray values and black labels for hot water.
 - **Total / Gesamt:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
 
