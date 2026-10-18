@@ -8,7 +8,7 @@ import { mergeSettings, deploy, projectRoot } from '../deploy.mjs';
 test('updating an existing instance retains OAuth, polling and configured values', () => {
   const installed = {
     id: 510867, name: 'My existing dashboard',
-    oauth_client_id: 'synthetic-client', oauth_pkce_enabled: 'true', oauth_scopes: 'existing-scopes',
+    oauth_client_id: 'synthetic-client', oauth_pkce_enabled: 'yes', oauth_scopes: 'existing-scopes',
     polling_url: 'https://example.invalid/my-device', polling_headers: 'saved-header', refresh_interval: 15,
     custom_fields_values: { installation_id: 'synthetic-installation', language: 'de' },
     custom_fields: [{ keyname: 'language', name: 'Old name', default: 'de' }, { keyname: 'extra', name: 'Keep me' }]
@@ -31,10 +31,10 @@ test('updating an existing instance retains OAuth, polling and configured values
 });
 
 test('Viessmann PKCE remains enabled even when the exported instance disabled it', () => {
-  for (const value of [false, 'false', 'no', '', null, undefined]) {
+  for (const value of [false, 'false', 'no', 'true', true, 'yes', '', null, undefined]) {
     const merged = mergeSettings({ oauth_pkce_enabled: 'true', polling_headers: 'Authorization=Bearer {{ oauth_access_token }}' },
       { id: 510867, oauth_pkce_enabled: value }, 510867);
-    assert.equal(merged.oauth_pkce_enabled, 'true');
+    assert.equal(merged.oauth_pkce_enabled, 'yes');
   }
 });
 
