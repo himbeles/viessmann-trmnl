@@ -35,7 +35,7 @@ test('Viessmann PKCE remains enabled even when the exported instance disabled it
     const merged = mergeSettings({ oauth_pkce_enabled: 'true', polling_headers: 'Authorization=Bearer {{ oauth_access_token }}' },
       { id: 510867, oauth_pkce_enabled: value }, 510867);
     assert.equal(merged.oauth_pkce_enabled, 'yes');
-    assert.equal(merged.oauth_enabled, 'yes');
+    assert.equal(merged.oauth_enabled, 'true');
   }
 });
 

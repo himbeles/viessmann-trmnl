@@ -38,8 +38,8 @@ export function mergeSettings(template, installed, expectedId) {
     ? installed.polling_headers : template.polling_headers;
   if (!pollingHeaders) throw new Error('No polling authentication header is available; refusing to upload.');
   return { ...installed, id: expectedId, polling_headers: pollingHeaders,
-    // Hosted TRMNL's PKCE selector stores yes/no; the local gem documents true/false.
-    oauth_enabled: 'yes', oauth_pkce_enabled: 'yes',
+    // These hosted fields have different encodings: OAuth true/false, PKCE yes/no.
+    oauth_enabled: 'true', oauth_pkce_enabled: 'yes',
     serverless_language: 'node', custom_fields: [...definitions.values()] };
 }
 

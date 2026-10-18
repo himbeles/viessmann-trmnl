@@ -32,7 +32,7 @@ def main():
     # The archive importer and the settings form use different boolean values.
     # Write the hosted fields explicitly; never touch saved credentials/tokens.
     request('/settings', 'PATCH', {'fields': {
-        'oauth_enabled': 'yes',
+        'oauth_enabled': 'true',
         'oauth_pkce_enabled': 'yes',
         'polling_headers': 'Authorization=Bearer {{ oauth_access_token }}',
     }})
