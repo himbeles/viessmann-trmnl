@@ -116,7 +116,7 @@ You need a TRMNL account with private-plugin access (Developer edition or BYOD),
 5. Connect and authorize with Viessmann. Save, then **Force Refresh** and compare the readings with ViCare.
 6. Add the plugin to the device playlist and choose a layout.
 
-The default refresh interval is **60 minutes**, not seconds. The Serverless transform keeps the full Viessmann feature response below TRMNL's 100 KB limit and is uploaded by the official CLI. No additional server is required.
+The default refresh interval is **15 minutes**, not seconds. The Serverless transform keeps the full Viessmann feature response below TRMNL's 100 KB limit and is uploaded by the official CLI. No additional server is required.
 
 ## Configuration fields
 
@@ -162,7 +162,7 @@ Day counters use `currentDay` or the newest `day[0]` entry, with W/kW and Wh/kWh
 
 Missing features, unsupported units and disabled/error readings show a dash, not an invented zero. Thermal output is never inferred from electricity or COP, and day energy is not estimated by integrating infrequent power readings. Feature availability and update delays depend on the device and API plan; live availability for this installation still needs checking.
 
-Each energy reading has its own stale indicator; full/wide layouts also show its last-update time. **Current** means the latest API snapshot, not continuous monitoring. The default refresh remains hourly. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
+Each energy reading has its own stale indicator; full/wide layouts also show its last-update time. **Current** means the latest API snapshot, not continuous monitoring. The default refresh is every 15 minutes. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
 
 ## Curve, targets and timestamps
 
