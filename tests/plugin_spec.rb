@@ -61,7 +61,8 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-heating-block vp-block-active'])
         expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')
         expect(html.at_css('.vp-heating-block .vp-use-energy').text).to include('8 kWh', '35 kWh')
-        expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '27,1' : '27.1')
+        expect(html.css('.vp-water-flows')).to be_empty
+        expect(html.css('.vp-glyph').map { |glyph| glyph['data-glyph'] }).to contain_exactly('heating', 'water', 'pressure')
         expect(html.at_css('.vp-footer').text).to include('18.10.2026, 20:00')
         expect(html.at_css('.vp-footer').text).not_to match(/TRMNL|Read only|Nur Anzeige/)
         expect(html.at_css('.vp-blocks').text).not_to match(/18[.]10[.]2026/)
@@ -171,25 +172,27 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.dig('setpoints', 'supply')).to eq(27)
     expect(result.dig('setpoints', 'supply_calculated')).to be_nil
     html = document(render)
-    expect(html.at_css('.vp-curve-readings').text).to include('Circuit supply', '28 °C', '27 °C')
+    expect(result.dig('supply_reading', 'value')).to eq(28)
+    expect(html.at_css('.vp-supply-target').text).to include('27°C')
     expect(html.at_css('.vp-curve-readings').text).not_to include('45 °C')
   end
 
   it 'labels the heat-pump fallback and skips unusable circuit sensors' do
     data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'isEnabled' => false, 'properties' => { 'value' => { 'value' => 28 } } }
     expect(transform['supply_scope']).to eq('heat_pump')
-    expect(document(render).at_css('.vp-curve-readings').text).to include('Heat pump supply')
+    expect(document(render).at_css('.vp').text).not_to include('Heat pump supply', 'Heat pump return')
     sensor = feature('heating.circuits.0.sensors.temperature.supply')
     sensor['isEnabled'] = true
     sensor['properties']['status'] = { 'value' => 'disconnected' }
     expect(transform['supply_scope']).to eq('heat_pump')
   end
 
-  it 'keeps outlying measurements in the side readings without changing the target-only plot' do
+  it 'keeps outlying measurements in diagnostics without changing the target-only plot' do
     feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 75
     result = transform
     expect(result.dig('curve', 'ticks').last['value']).to eq(55)
-    expect(document(render).at_css('.vp-curve-readings').text).to include('75 °C')
+    expect(result.dig('supply_reading', 'value')).to eq(75)
+    expect(document(render).at_css('.vp').text).not_to include('75 °C')
     expect(result.dig('curve', 'points').map { |point| point['supply'] }.max).to eq(50)
   end
 
@@ -249,9 +252,8 @@ RSpec.describe 'Viessmann heat pump' do
       expect(values.fetch('heating')).to include('supply' => state == 'heating' ? 32.4 : nil, 'return' => state == 'heating' ? 27.1 : nil)
       expect(values.fetch('dhw')).to include('supply' => state == 'dhw' ? 47 : nil, 'return' => state == 'dhw' ? 42 : nil)
       html = document(render)
-      supply = html.css('.vp-curve-readings text')[1].text
-      expect(supply).to include(state == 'heating' ? '32.4' : '—')
-      expect(html.at_css('.vp-water-flows').text).to include(state == 'dhw' ? '47 °C' : '— °C')
+      expect(html.css('.vp-water-flows')).to be_empty
+      expect(html.at_css('.vp').text).not_to include('Heat pump return', '47 °C', '42 °C')
       expect(html.at_css('.vp-curve-readings').text).to include('32.4') # target stays visible
     end
   end
@@ -262,7 +264,7 @@ RSpec.describe 'Viessmann heat pump' do
     expect(document(render).css('.vp-heating-block.vp-block-active')).to be_empty
     feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'dhw'
     expect(transform.fetch('temperatures').fetch('dhw')).to include('supply' => nil, 'return' => nil)
-    expect(document(render).at_css('.vp-water-flows').text).not_to include('48.2')
+    expect(document(render).css('.vp-water-flows')).to be_empty
   end
 
   it 'reads daily heating and water separately alongside whole-device totals' do
@@ -391,7 +393,7 @@ RSpec.describe 'Viessmann heat pump' do
     html = document(render)
     expect(html.at_css('.vp-metrics').text).to include('-5.2°C')
     expect(html.at_css('.vp-water').text).to include('—°C')
-    expect(html.at_css('.vp-curve-readings').text).to include('0 °C')
+    expect(transform.dig('supply_reading', 'value')).to eq(0)
   end
 
   it 'supports custom sensors, another circuit and multi-URL response wrappers' do
