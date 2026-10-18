@@ -1,6 +1,6 @@
 # Viessmann heat pump for TRMNL X
 
-A read-only TRMNL private plugin showing supply, hot-water and outdoor temperatures, heating-curve parameters and the configured operating mode. The full-screen layout plots a nonlinear E3 heating curve with six labelled outdoor-temperature points and the configured supply-temperature limit. Compact layouts show temperatures, targets and a prominent operating mode.
+A read-only TRMNL private plugin showing supply, hot-water and outdoor temperatures, heating-curve parameters, the configured operating mode, electrical consumption and thermal heat output. The full-screen layout plots a nonlinear E3 heating curve with six labelled outdoor-temperature points and the configured supply-temperature limit. Compact layouts show temperatures, targets and a prominent operating mode.
 
 The display defaults to **English**. Choose **Deutsch** in **Display language** for German labels, status messages, number formatting and timestamps.
 
@@ -68,6 +68,10 @@ The plugin uses **Polling**, **GET**, and `Authorization: Bearer {{ oauth_access
 | API feature: configured hot-water target | `heating.dhw.temperature.main` | Configured main hot-water target; not necessarily the active scheduled target. |
 | Maximum supply temperature (fallback, °C) | Blank | Used only when the API does not expose the circuit maximum; API values take precedence. |
 | Heating curve reference points | Blank | Optional JSON reference pairs that override the dynamic model. Leave blank for live calculation. |
+| API feature: current electrical power | Auto | Prefer whole-device electrical input, otherwise compressor 0; scope is shown. |
+| API feature: electricity used today | Auto | Prefer device total, otherwise heating + DHW counters, including cooling when present. |
+| API feature: current thermal output | Auto | Prefer whole-device heat output, otherwise compressor 0; scope is shown. |
+| API feature: heat delivered today | Auto | Prefer device heat total, otherwise heating + DHW heat counters. |
 
 The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset and `heating.circuits.N.operating.modes.active` for operating mode. An operating mode is not a compressor-running indicator.
 
@@ -79,6 +83,27 @@ The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset 
 - **HTTP 401 / 403 / 429:** reconnect for authentication errors, check permissions for access errors, or wait for the API quota to reset.
 - **Redirect error:** compare the registered URI with the exact callback URL shown by your plugin.
 - **Stale or unknown timestamp:** check the sensor timestamp in your configured time zone. An offline E-Ink screen retains its last image and cannot update its stale badge until another screen is rendered.
+
+## Electricity consumption and heat output
+
+All four layouts keep these quantities separate:
+
+| Reading | Unit | Meaning |
+|---|---|---|
+| Electricity now / Strom aktuell | kW | Electrical input at the latest API update. |
+| Electricity today / Strom heute | kWh | Cumulative electrical energy for the running device day. |
+| Heat output now / Wärme aktuell | kW | Thermal output at the latest API update. |
+| Heat today / Wärme heute | kWh | Cumulative thermal energy for the running device day. |
+
+Current readings prefer whole-device features and fall back to compressor 0 where available. A **Compressor** label means that other consumers or heat sources, such as pumps or the auxiliary heater, are not included. Do not treat that value as a whole-system measurement.
+
+Daily readings prefer an API total and never add it to its own component counters. When no total is available, the plugin adds heating and DHW counters and labels the scope. Electrical totals also include a cooling counter when one is present and valid; the heating/DHW heat fallback excludes cooling. The API's reported total is used as reported.
+
+Day counters use `currentDay` or the newest `day[0]` entry, with W/kW and Wh/kWh converted using the API unit. A counter without a timestamp from the current day in the configured time zone is withheld, preventing yesterday's number from being shown as today. Choose the installation's time zone for these checks. Changing the display time zone cannot rebin the API's day totals into a different calendar day.
+
+Missing features, unsupported units and disabled/error readings show a dash, not an invented zero. Thermal output is never inferred from electricity or COP, and day energy is not estimated by integrating infrequent power readings. Feature availability and update delays depend on the device and API plan; live availability for this installation still needs checking.
+
+Each energy reading has its own stale indicator; full/wide layouts also show its last-update time. **Current** means the latest API snapshot, not continuous monitoring. The default refresh remains hourly. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
 
 ## Curve, targets and timestamps
 

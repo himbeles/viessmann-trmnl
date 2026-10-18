@@ -44,7 +44,7 @@ def main():
         selected = []
         for feature in payload['data']:
             name = feature.get('feature', '')
-            if any(part in name for part in ('temperature', 'heating.curve', 'operating.modes.active')):
+            if any(part in name for part in ('temperature', 'heating.curve', 'operating.modes.active', 'power.consumption', 'heat.production')):
                 # Exclude commands, links, addresses, OAuth data and device identifiers.
                 selected.append({k: feature[k] for k in ('feature', 'isEnabled', 'timestamp', 'properties') if k in feature})
         result = {'data': selected}

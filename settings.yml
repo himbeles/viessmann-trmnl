@@ -78,6 +78,32 @@ custom_fields:
     max: 100
     description: Only used when the API omits the circuit maximum. Enter the current
       device setting (e.g. 50); API values take precedence.
+  - keyname: current_power_feature
+    name: "API feature: current electrical power (optional)"
+    field_type: string
+    optional: true
+    description: "Blank: prefer device power, otherwise compressor 0. The reading
+      scope is displayed. The API property must include W or kW units."
+  - keyname: daily_energy_feature
+    name: "API feature: electricity used today (optional)"
+    field_type: string
+    optional: true
+    description: "Blank: prefer device total, otherwise add heating and DHW
+      summaries (plus cooling when present). Uses currentDay or day[0], with
+      Wh/kWh units and a timestamp from today."
+  - keyname: current_heat_feature
+    name: "API feature: current thermal output (optional)"
+    field_type: string
+    optional: true
+    description: "Blank: prefer device heat production, otherwise compressor 0.
+      Requires W/kW units."
+  - keyname: daily_heat_feature
+    name: "API feature: heat delivered today (optional)"
+    field_type: string
+    optional: true
+    description: "Blank: prefer device heat-production total, otherwise heating +
+      DHW. Requires a currentDay/day[0] counter with Wh/kWh units and a
+      timestamp from today."
 polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{
   installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode
   }}/devices/{{ device_id | url_encode }}/features/

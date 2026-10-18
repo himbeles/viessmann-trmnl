@@ -19,7 +19,11 @@ function run(input) {
     supply_setpoint_feature: text(cfg.supply_setpoint_feature, ''),
     water_setpoint_feature: text(cfg.water_setpoint_feature, 'heating.dhw.temperature.main'),
     curve_points: text(cfg.curve_points, '', 8000),
-    max_supply_temperature: numeric(cfg.max_supply_temperature)
+    max_supply_temperature: numeric(cfg.max_supply_temperature),
+    current_power_feature: text(cfg.current_power_feature, ''),
+    daily_energy_feature: text(cfg.daily_energy_feature, ''),
+    current_heat_feature: text(cfg.current_heat_feature, ''),
+    daily_heat_feature: text(cfg.daily_heat_feature, '')
   };
   const fields = new Map([
     [settings.supply_feature, ['value', 'status']],
@@ -84,6 +88,107 @@ function run(input) {
     missing_time: sensors.length === 0 || knownTimes.length !== sensors.length,
     stale: oldest !== null && now > 0 && now - oldest > settings.stale_minutes * 60000
   };
+
+  // Electrical input and thermal output are separate quantities, never inferred from COP.
+  const convert = (property, quantity) => {
+    const amount = numeric(property?.value);
+    if (amount == null || amount < 0) return null;
+    const unit = String(property?.unit || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (quantity === 'power') {
+      if (['kw', 'kilowatt', 'kilowatts'].includes(unit)) return amount;
+      if (['w', 'watt', 'watts'].includes(unit)) return amount / 1000;
+    } else {
+      if (['kwh', 'kilowatthour', 'kilowatthours'].includes(unit)) return amount;
+      if (['wh', 'watthour', 'watthours'].includes(unit)) return amount / 1000;
+    }
+    return null;
+  };
+  const calendarDate = timestamp => {
+    if (!Number.isFinite(timestamp)) return null;
+    const parts = new Intl.DateTimeFormat('en', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(timestamp);
+    return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-');
+  };
+  const today = now > 0 ? calendarDate(now) : null;
+  const readEnergy = (base, currentFeature, dailyFeature) => {
+    const rawFeature = name => typeof name === 'string' && name.includes(`.${base}.`)
+      ? features.find(item => item?.feature === name && item.isEnabled !== false && item.properties?.status?.value !== 'error') : null;
+    const powerNames = currentFeature ? [currentFeature] : [
+      `heating.${base}.current`, `heating.compressors.0.${base}.current`
+    ];
+    const metrics = { power_kw: null, today_kwh: null, today_date: today };
+    for (const name of powerNames) {
+      const item = rawFeature(name);
+      const amount = convert(item?.properties?.value, 'power');
+      if (amount == null) continue;
+      const timestamp = Date.parse(item.timestamp);
+      metrics.power_kw = amount;
+      metrics.power_scope = name.includes('.compressors.') ? 'compressor' : name.includes('.heatingRod.') ? 'heater' : 'device';
+      metrics.power_updated = formatTime(Number.isFinite(timestamp) ? timestamp : null);
+      metrics.power_stale = Number.isFinite(timestamp) && now > 0 && now - timestamp > settings.stale_minutes * 60000;
+      break;
+    }
+    let outdatedEnergy = false;
+    const readDay = name => {
+      const item = rawFeature(name);
+      if (!item) return null;
+      let property = item.properties?.currentDay;
+      if (!property && Array.isArray(item.properties?.day?.value)) {
+        // Viessmann day arrays start with the running day, followed by previous days.
+        property = { ...item.properties.day, value: item.properties.day.value[0] };
+      }
+      if (!property && name.endsWith('.day')) property = item.properties?.value;
+      const amount = convert(property, 'energy');
+      if (amount == null) return null;
+      const timestamp = Date.parse(item.timestamp);
+      if (today == null || calendarDate(timestamp) !== today) {
+        outdatedEnergy = true;
+        return null;
+      }
+      return { amount, timestamp };
+    };
+    const firstDay = names => {
+      for (const name of names) {
+        const reading = readDay(name);
+        if (reading) return reading;
+      }
+      return null;
+    };
+    let daily;
+    let dailyScope = 'device';
+    if (dailyFeature) {
+      daily = readDay(dailyFeature);
+      if (dailyFeature.includes('.compressors.')) dailyScope = 'compressor';
+      else if (dailyFeature.includes('.heatingRod.')) dailyScope = 'heater';
+      else if (dailyFeature.endsWith('.heating')) dailyScope = 'heating';
+      else if (dailyFeature.endsWith('.dhw')) dailyScope = 'dhw';
+      else if (dailyFeature.endsWith('.cooling')) dailyScope = 'cooling';
+    } else {
+      daily = firstDay([`heating.${base}.summary.total`, `heating.${base}.total`, `heating.${base}.summary`]);
+      if (!daily) {
+        const heating = firstDay([`heating.${base}.summary.heating`, `heating.${base}.heating`]);
+        const dhw = firstDay([`heating.${base}.summary.dhw`, `heating.${base}.dhw`]);
+        const coolingNames = [`heating.${base}.summary.cooling`, `heating.${base}.cooling`];
+        const hasCooling = base === 'power.consumption' && coolingNames.some(name => rawFeature(name));
+        const cooling = hasCooling ? firstDay(coolingNames) : null;
+        if (heating && dhw && (!hasCooling || cooling)) {
+          daily = { amount: heating.amount + dhw.amount + (cooling?.amount ?? 0), timestamp: Math.min(heating.timestamp, dhw.timestamp, cooling?.timestamp ?? Infinity) };
+          dailyScope = hasCooling ? 'heating_dhw_cooling' : 'heating_dhw';
+        }
+      }
+    }
+    if (daily) {
+      metrics.today_kwh = Math.round(daily.amount * 1000) / 1000;
+      metrics.today_scope = dailyScope;
+      metrics.today_updated = formatTime(daily.timestamp);
+      metrics.today_stale = now - daily.timestamp > settings.stale_minutes * 60000;
+    } else {
+      metrics.today_outdated = outdatedEnergy;
+    }
+
+    return metrics;
+  };
+  result.energy = readEnergy('power.consumption', settings.current_power_feature, settings.daily_energy_feature);
+  result.heat = readEnergy('heat.production', settings.current_heat_feature, settings.daily_heat_feature);
 
   // E3 curve calculation used by PyViCare, with live circuit limits.
   // https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatCurveCalculation.py

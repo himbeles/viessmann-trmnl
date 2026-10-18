@@ -104,6 +104,27 @@ These are candidates to verify for the device. The three temperature feature nam
 
 The current hot-water feature name uses `dhwCylinder`; older instructions may reference `hotWaterStorage`, renamed by Viessmann in 2025. Missing, disabled or failed sensors display a dash rather than zero. Zero and negative readings are preserved. Unknown operating-mode codes are escaped and displayed unchanged. The operating mode does not indicate whether the compressor is currently running.
 
+## Electrical and thermal API mapping
+
+The serverless script reads these feature candidates directly from the polled response. It returns only normalized values, source scope and timestamps, without copying commands or full energy histories into the render payload.
+
+| Reading | Preferred / fallback features | Property |
+|---|---|---|
+| Current electricity | `heating.power.consumption.current`, then `heating.compressors.0.power.consumption.current` | `properties.value`, W/kW |
+| Current heat output | `heating.heat.production.current`, then `heating.compressors.0.heat.production.current` | `properties.value`, W/kW |
+| Daily electricity total | `heating.power.consumption.summary.total`, `.total`, `.summary` | `properties.currentDay` or newest `properties.day.value[0]`, Wh/kWh |
+| Daily heat total | `heating.heat.production.summary.total`, `.total`, `.summary` | Same day properties, Wh/kWh |
+| Electricity component fallback | `heating.power.consumption.summary.heating` + `.summary.dhw`, plus `.summary.cooling` if present | `properties.currentDay`; legacy `consumption.heating/dhw/cooling` day arrays also supported |
+| Heat component fallback | `heating.heat.production.summary.heating` + `.summary.dhw` | `properties.currentDay`; legacy `production.heating/dhw` day arrays also supported |
+
+Shortened feature names in this table retain their family's full prefix. These are supported candidates, not a claim that the account exposes all of them. Optional `current_power_feature`, `daily_energy_feature`, `current_heat_feature` and `daily_heat_feature` settings select explicit features. Electrical overrides must remain in the `.power.consumption.` family and thermal overrides in `.heat.production.`. Compressor or auxiliary-heater overrides are labelled as components. A scalar daily feature ending in `.day` is also supported through `properties.value`.
+
+Totals are preferred over components to avoid double counting. Missing heating/DHW components are not silently substituted with zero; an electrical cooling component that exists but is unusable prevents an incomplete sum. Cooling is excluded from the heating/DHW heat fallback. Each daily counter must have a valid feature timestamp on the same local date as the current render; yesterday and unknown dates are withheld. A same-day old timestamp may still show a value with its own stale warning.
+
+The API owns the day bucket and its reset; the script does not maintain an accumulator or derive kWh from instantaneous kW. Display-zone changes do not repartition the API's counters. Set `time_zone` to the installation's zone for day validation. W/kW and Wh/kWh are normalized explicitly; unknown units, negative values and disabled/error features are unavailable. Actual zero values are preserved.
+
+[PyViCare's heat-pump implementation](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatPump.py) documents the compressor input/output readings and electrical daily summaries. The optional inventory helper now includes both `.power.consumption.` and `.heat.production.` feature families. The available features and actual hosted readings still need verification in the connected account.
+
 ## Heating curve and data age
 
 The full layout calculates the six values at −30, −20, −10, 0, 10 and 20 °C, with intermediate points for the complete graph. It uses the E3 variant implemented in [PyViCare's heat-curve calculation](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatCurveCalculation.py). [PyViCare selects this variant](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatingDevice.py) for devices with both `type:heatpump` and `type:E3`, matching the supplied inventory.
@@ -139,7 +160,7 @@ python auxiliary/package.py
 
 Open `auxiliary/output/preview.html` locally. Its plugin-language selector demonstrates English and German with sample data or without a connection. All surrounding preview controls use English. `auxiliary/output/demo-data.json` is a synthetic API fixture; it is not shipped as live data. To preview in TRMNL, temporarily use Static strategy with this fixture, then restore Polling before live use.
 
-Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
+Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, electrical/thermal units and source separation, day-counter rollover and totals, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
 
 ## Official references
 

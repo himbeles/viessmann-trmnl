@@ -35,12 +35,19 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   const output = new URL('./output/', import.meta.url);
   await mkdir(output, { recursive: true });
-  await writeFile(new URL('demo-data.json', output), JSON.stringify(sample, null, 2) + '\n');
+  const demoSample = structuredClone(sample);
+  for (const [feature, property, value, unit] of [
+    ['heating.compressors.0.power.consumption.current', 'value', 1.8, 'kilowatt'],
+    ['heating.power.consumption.summary.total', 'currentDay', 12.34, 'kilowattHour'],
+    ['heating.compressors.0.heat.production.current', 'value', 7.2, 'kilowatt'],
+    ['heating.heat.production.total', 'day', [48.6, 50], 'kilowattHour']
+  ]) demoSample.data.push({ feature, isEnabled: true, timestamp: '2026-10-18T18:00:00Z', properties: { [property]: { value, unit } } });
+  await writeFile(new URL('demo-data.json', output), JSON.stringify(demoSample, null, 2) + '\n');
   const views = {};
   for (const language of ['en', 'de']) {
     const trmnl = structuredClone(context.trmnl);
     trmnl.plugin_settings.custom_fields_values.language = language;
-    for (const state of ['demo', 'empty']) views[`${language}-${state}`] = await render(state === 'demo' ? sample : {}, { trmnl });
+    for (const state of ['demo', 'empty']) views[`${language}-${state}`] = await render(state === 'demo' ? demoSample : {}, { trmnl });
   }
   await writeFile(new URL('preview.html', output), `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
