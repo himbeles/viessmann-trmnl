@@ -52,6 +52,8 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
         expect(html.css('.vp-supply-marker, .vp-return-marker, .vp-measured-guide')).to be_empty
         expect(html.at_css('.vp-target-marker')).not_to be_nil
+        expect(html.css('.vp-curve-step').size).to eq(6)
+        expect(html.css('.vp-x-tick').size).to eq(6)
         expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty
         expect(html.css('path[stroke-dasharray="7 4"]')).to be_empty
         expect(html.css('.vp-params > div').size).to eq(3)
@@ -210,6 +212,7 @@ RSpec.describe 'Viessmann heat pump' do
     html = document(render)
     expect(html.at_css('.vp-footer').text.strip).to eq('Updated: 18.10.2026, 20:05')
     expect(html.at_css('.vp-blocks').text).not_to include('20:05', '12:00')
+    expect(html.at_css('.vp').text).not_to match(/Stale data|Daten veraltet/)
   end
 
   it 'includes return and pressure timestamps only for usable displayed readings' do
@@ -220,13 +223,21 @@ RSpec.describe 'Viessmann heat pump' do
     expect(transform.dig('freshness', 'latest_reading')).to include('20:03')
   end
 
-  it 'prefers circuit return and rejects disconnected fallback readings' do
+  it 'uses only the matching circuit return and rejects disconnected readings' do
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 28 } } }
     data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.return', 'properties' => { 'value' => { 'value' => 24.5 } } }
     expect(transform.fetch('return_reading')).to include('value' => 24.5, 'scope' => 'circuit')
     feature('heating.circuits.0.sensors.temperature.return')['isEnabled'] = false
     feature('heating.sensors.temperature.return')['properties']['status']['value'] = 'disconnected'
     expect(transform.dig('return_reading', 'value')).to be_nil
     expect(document(render).css('.vp-return-marker')).to be_empty
+  end
+
+  it 'does not pair a hot heat-pump return with the selected circuit supply' do
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 26 } } }
+    feature('heating.sensors.temperature.return')['properties']['value']['value'] = 44.2
+    expect(transform.fetch('return_reading')).to include('value' => nil, 'scope' => 'circuit')
+    expect(document(render).at_css('.vp-curve-readings').text).not_to include('44.2')
   end
 
   it 'reads daily heating and water separately alongside whole-device totals' do
@@ -547,14 +558,14 @@ RSpec.describe 'Viessmann heat pump' do
 
   %w[en de].each do |language|
     %w[full half_horizontal half_vertical quadrant].each do |view|
-      it "shows the old component explicitly in #{language} #{view}" do
+      it "keeps old counters visible without outdated labels in #{language} #{view}" do
         combined_heat
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         heat_tile = document(screen).css('.vp-energy > div')[3]
         note = heat_tile.at_css('.vp-energy-note').text.gsub(/\s+/, ' ').strip
-        expect(note).to include(language == 'de' ? 'Warmwasser: Daten veraltet' : 'Hot water: Stale data')
-        expect(note).not_to include(language == 'de' ? 'Heizung: Daten veraltet' : 'Heating: Stale data')
+        expect(document(screen).at_css('.vp').text).not_to match(/Stale data|Daten veraltet/)
+        expect(note).to include(language == 'de' ? 'Gesamtes Gerät' : 'Whole device')
         expect(heat_tile.css('.vp-energy-asof')).to be_empty
         expect(document(screen).at_css('.vp-footer').text).to include('20:00')
         expect(heat_tile.at_css('.vp-energy-value').text).to include('35')

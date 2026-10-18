@@ -51,10 +51,10 @@ function run(input) {
   fields.set('heating.valves.fourThreeWay.position', ['value', 'status']);
   fields.set('heating.sensors.pressure.supply', ['value', 'status']);
   const circuitReturn = `${prefix}.sensors.temperature.return`;
-  const selectedReturn = features.some(item => item?.feature === circuitReturn && item.isEnabled !== false
-    && !['error', 'disconnected', 'unavailable'].includes(item.properties?.status?.value)
-    && numeric(item.properties?.value?.value) != null) ? circuitReturn : 'heating.sensors.temperature.return';
-  fields.set(selectedReturn, ['value', 'status']);
+  // Do not compare the heat-pump return with a heating-circuit supply sensor.
+  const selectedReturn = selectedSupply === circuitSupply ? circuitReturn
+    : selectedSupply === deviceSupply ? 'heating.sensors.temperature.return' : null;
+  if (selectedReturn) fields.set(selectedReturn, ['value', 'status']);
   fields.set(`${prefix}.operating.programs.active`, ['value']);
   fields.set(`${prefix}.operating.programs.normal`, ['temperature']);
   fields.set(`${prefix}.operating.programs.normalHeating`, ['temperature']);
@@ -95,7 +95,7 @@ function run(input) {
   const value = name => valid(name)?.properties?.value?.value ?? null;
   const room = program && program !== 'standby' ? valid(`${prefix}.operating.programs.${program}`)?.properties?.temperature?.value ?? null : null;
   const pumpStatus = valid(`${prefix}.circulation.pump`)?.properties?.status?.value;
-  result.return_reading = { value: value(selectedReturn), scope: selectedReturn === circuitReturn ? 'circuit' : 'heat_pump' };
+  result.return_reading = { value: value(selectedReturn), scope: selectedReturn === circuitReturn ? 'circuit' : selectedReturn ? 'heat_pump' : 'unavailable' };
   result.supply_reading = { feature: selectedSupply, value: value(selectedSupply) };
   result.supply_scope = selectedSupply === circuitSupply ? 'circuit' : selectedSupply === deviceSupply ? 'heat_pump' : 'custom';
   result.heating = { state: pumpStatus === 'on' || pumpStatus === 'off' ? pumpStatus : 'unknown' };
@@ -503,7 +503,7 @@ function run(input) {
       reference, room_setpoint: curveRoom, max_supply: !reference && limitsValid ? maxSupply : null, max_from_api: apiMax != null,
       cap_y: !reference && maxSupply != null && limitsValid ? round(156 - (maxSupply - minY) / (maxY - minY) * 132) : null,
       invalid_reference: Boolean(settings.curve_points) && !reference,
-      points: plotted, polyline: plotted.map(point => `${point.x},${point.y}`).join(' '),
+      points: plotted, step_points: plotted.filter(point => point.outdoor % 10 === 0), polyline: plotted.map(point => `${point.x},${point.y}`).join(' '),
       ticks: Array.from({ length: 5 }, (_, index) => ({
         value: round(minY + index * (maxY - minY) / 4), y: 156 - index * 33
       })),

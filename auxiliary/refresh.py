@@ -61,6 +61,7 @@ def main():
             'active_circuit': variables.get('activity', {}).get('state'),
             'pressure_bar': variables.get('pressure', {}).get('bar'),
             'return_temperature_c': variables.get('return_reading', {}).get('value'),
+            'return_scope': variables.get('return_reading', {}).get('scope'),
             'latest_reading': variables.get('freshness', {}).get('latest_reading'),
             'electricity_by_use': variables.get('energy', {}).get('by_use'),
             'supply_scope': variables.get('supply_scope'),
