@@ -49,7 +49,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.css('.vp-blocks > section').size).to eq(3)
         expect(html.at_css('.vp-water-block .vp-water').text).to include(language == 'de' ? '48,2' : '48.2')
         expect(html.at_css('.vp-heating-block > .vp-metrics .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
-        expect(html.at_css('.vp-supply-readings > .vp-supply-target .vp-full-label').text).to eq(language == 'de' ? 'Vorlauf-Solltemperatur' : 'Supply target temperature')
+        expect(html.at_css('.vp-supply-readings > .vp-supply-target .vp-full-label').text).to eq(language == 'de' ? 'Soll' : 'Target')
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
@@ -176,7 +176,7 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.dig('setpoints', 'supply_calculated')).to be_nil
     html = document(render)
     expect(result.dig('supply_reading', 'value')).to eq(28)
-    expect(html.at_css('.vp-supply-target').text).to include('27°C')
+    expect(html.at_css('.vp-supply-target').text).to include('27 °C')
     expect(html.at_css('.vp-curve-readings').text).not_to include('45 °C')
   end
 
@@ -279,7 +279,7 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.fetch('radiator')).to include('supply' => 26, 'target' => 26.5)
     html = document(render)
     expect(html.at_css('.vp-supply-actual').text).to include('26°C')
-    expect(html.at_css('.vp-supply-target').text).to include('26.5°C')
+    expect(html.at_css('.vp-supply-target').text).to include('26.5 °C')
     expect(html.at_css('.vp-supply-readings').text).not_to include('45')
   end
 
