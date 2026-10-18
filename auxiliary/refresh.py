@@ -11,8 +11,9 @@ from urllib.request import Request, urlopen
 BASE = 'https://trmnl.com/api/plugin_settings/510867'
 
 
-def request(path, method='GET'):
-    req = Request(BASE + path, method=method, headers={
+def request(path, method='GET', data=None):
+    req = Request(BASE + path, method=method, data=json.dumps(data).encode() if data is not None else None, headers={
+        'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + os.environ['TRMNL_API_KEY'],
         'Accept': 'application/json',
         'User-Agent': 'viessmann-trmnl/health-check',
@@ -26,6 +27,14 @@ def request(path, method='GET'):
 
 
 def main():
+    # The archive importer and the settings form use different boolean values.
+    # Write the hosted fields explicitly; never touch saved credentials/tokens.
+    request('/settings', 'PATCH', {'fields': {
+        'oauth_enabled': 'yes',
+        'oauth_pkce_enabled': 'yes',
+        'polling_headers': 'Authorization=Bearer {{ oauth_access_token }}',
+    }})
+    print('Hosted OAuth and PKCE enabled; OAuth polling header restored.', flush=True)
     request('/health_resets', 'POST')
     print('Plugin health reset. Starting a real polling refresh.', flush=True)
     result = request('/refreshes', 'POST')
@@ -50,7 +59,7 @@ def main():
         'last_refresh': health.get('last_refresh'),
         'error_http_codes': re.findall(r'HTTP\s+(\d{3})', str(health.get('error_message') or '') + json.dumps(result.get('logs', []))),
     }, indent=2), flush=True)
-    if result.get('success') is not True or result.get('warning') or health.get('state') != 'active':
+    if result.get('success') is not True or result.get('warning') or health.get('state') != 'active' or not features:
         raise RuntimeError('Live polling verification failed. Inspect the plugin status on TRMNL.')
 
 

@@ -44,9 +44,13 @@ try {
     : value && typeof value === 'object' ? { type: 'object', keys: Object.keys(value) } : { type: typeof value };
   console.log(JSON.stringify({
     live_state: details.state,
+    live_oauth_enabled: details.settings?.oauth_enabled,
+    live_pkce_enabled: details.settings?.oauth_pkce_enabled,
+    live_polling_header_present: present(details.settings?.polling_headers),
+    live_oauth_client_id_present: present(details.settings?.oauth_client_id),
     live_settings_keys: Object.keys(details.settings || {}),
     available_fields: describe(details.available_fields),
-    form_fields: Array.isArray(details.form_fields) ? details.form_fields.map(field => ({ keyname: field.keyname, name: field.name, field_type: field.field_type })) : describe(details.form_fields),
+
     health_state: status.health?.state,
     retry_count: status.health?.error_retry_count,
     last_refresh: status.health?.last_refresh,
