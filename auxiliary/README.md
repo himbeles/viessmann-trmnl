@@ -1,81 +1,22 @@
-# Viessmann heat pump for TRMNL X
+# Viessmann API and implementation notes
 
-A read-only private TRMNL plugin. English is the default; select **Deutsch** in the plugin's **Display language** field for German. The selection applies to all four layouts, status messages, the chart description, decimal separators and timestamps. Configuration fields, documentation and developer tools use English.
+The plugin is a standard [trmnlp project](https://github.com/usetrmnl/trmnlp). Use the [root README](../README.md) for setup, native previews, tests and GitHub publishing. This folder contains optional API debugging tools and detailed feature documentation.
 
-## Repository and import format
+## Live polling diagnostics
 
-The repository follows the official trmnlp project structure. Plugin source files live in `src/`:
-
-```text
-.trmnlp.yml
-bin/trmnlp
-.github/workflows/trmnl.yml
-src/
-  settings.yml
-  full.liquid
-  half_horizontal.liquid
-  half_vertical.liquid
-  quadrant.liquid
-  transform.js
-auxiliary/                 # Documentation, debugging and development tools
-```
-
-Only the six files from `src/` belong in the import ZIP, without a parent folder. The flat archive includes `transform.js`, following the official CLI's Serverless transform-file support. Do not import a GitHub source ZIP: it includes a directory wrapper and auxiliary files. The plugin requires no local JavaScript or Python runtime; the tools in this folder are optional.
-
-To package the existing plugin files using Python's standard library, run from the repository root:
+The official CLI handles publishing. The small Python helper here checks the saved public OAuth toggles, resets health and requests a real poll of existing plugin **510867**. It requires a TRMNL account API key in `TRMNL_API_KEY`; it never rewrites OAuth settings or prints credentials, identifiers or raw response bodies.
 
 ```sh
-python auxiliary/package.py
+python3 auxiliary/refresh.py
 ```
 
-This creates and verifies `auxiliary/output/viessmann-trmnl-import.zip`. A different output path can be selected with `--output PATH`. In TRMNL, open **Plugins → Private Plugin → Import new** and select this ZIP. Developer features or a BYOD license are required for private plugins.
+Set the key privately in your shell, or run the check in GitHub's existing deployment job. The helper uses Python's standard library. An optional `--debug` enables TRMNL's own request logs for 24 hours; inspect those privately in TRMNL. The API may summarize arrays as `{_compacted, count, sample}`; this is an API inspection format, not missing dashboard data.
 
-The plugin uses **Polling** with an hourly refresh interval (60 minutes). It starts without credentials or sample readings. Complete the API identifiers and OAuth configuration before the first successful refresh.
+The root workflow comes from `trmnlp init`. Its only plugin-specific extension is this live polling check after the official `trmnlp push --force` command. No custom clone/merge/deploy pipeline or npm dependencies are needed.
 
-## Existing-instance deployment
+The local `.trmnlp.yml` supplies synthetic input using native variable overrides. Tests in `tests/plugin_spec.rb` use the same fixture with native `trmnl.transform`, `trmnl.render`, a frozen clock and the official Liquid runtime. Shared styling and translations are in `src/shared.liquid`; all four view files use TRMNL's native `template`/`render` tags. The transform is unchanged by the architecture migration.
 
-See the [root README](../README.md#update-the-existing-plugin-with-trmnlp) for one-time API-key setup. Plugin **510867** is the configured target. The GitHub Actions workflow uses a **repository** secret called `TRMNL_API_KEY` and runs `node auxiliary/deploy.mjs --yes` only after verification.
-
-The deployment helper calls the official CLI to clone the target, preserves its exported instance settings, merges form definitions, overlays the current source, lints, and pushes to the explicit same ID. A wrong/missing ID aborts. `--dry-run` exercises clone/merge/lint without a push. Temporary exports are ignored and removed on success or failure. The workflow does not need Viessmann OAuth tokens in GitHub.
-
-The versioned `.trmnlp.yml` intentionally excludes the linter's `no_style_restyling_framework` rule to retain this existing custom dashboard's typography. All other current checks run. No deployment happens if the TRMNL repository secret is missing.
-
-The hosted Serverless input does not include `trmnl.system`; `transform.js` uses the VM's own clock in that case. Tests can supply a timestamp for deterministic day-boundary checks.
-
-## Connect Viessmann directly
-
-1. Import the plugin and open its settings.
-2. Set **API installation ID**, **API gateway serial number** and **API device ID** from the API inventory below. These values are not OAuth credentials.
-3. Under OAuth settings, enter your own Viessmann application's Client ID. For a public PKCE client, leave the Client Secret empty. Do not put tokens in the markup or Static Data.
-4. Copy the exact **OAuth Redirect URL shown by your own TRMNL plugin** into the Viessmann application's allowed redirect URIs.
-5. Verify the imported provider configuration against the current documentation for your Viessmann application:
-
-| Setting | Value |
-|---|---|
-| Authorization URL | `https://iam.viessmann-climatesolutions.com/idp/v3/authorize` |
-| Token / refresh URL | `https://iam.viessmann-climatesolutions.com/idp/v3/token` |
-| Scopes | `IoT User offline_access` |
-| PKCE | Enabled, S256 |
-| Scope separator | Space |
-| Token authentication | body |
-| Token body format | form |
-| Token field | access_token |
-| Expiry field / strategy | expires_in / expireIn |
-
-6. Connect through TRMNL and authorize in the Viessmann window. TRMNL stores and refreshes the tokens.
-7. Save, then **Force Refresh**. In **Edit Markup / Your Variables**, verify the API response and compare the displayed values with ViCare.
-
-Verify **Enable PKCE? → Yes** after saving. A **code challenge required** error means a new authorization request must be started with PKCE enabled.
-
-## Serverless response reduction
-
-Viessmann's full feature response can exceed TRMNL's 100 KB polling limit. `transform.js` defines the documented `run(input)` entry point for the Node Serverless runtime. It selects temperature readings, target settings, the selected circuit's curve, operating mode, active heating program and supply-temperature limits, then keeps only their required properties, enabled state and timestamps. It also returns only the runtime settings needed by the markup; credentials, commands and previous output are not echoed. No extra network requests are made.
-
-`src/settings.yml` enables `serverless_language: node`; the packager includes the script. For an existing connected plugin, follow the [upgrade instructions](../README.md#upgrade-an-existing-plugin-for-large-api-responses): paste `src/transform.js` into **Edit Markup → Serverless**, select **Node**, save, reset the impaired status, then force a refresh. Verify the script is present in that tab after new imports too.
-
-The [Serverless guide](https://help.trmnl.com/en/articles/14130649-serverless) describes the UI and function contract. The [official CLI](https://github.com/usetrmnl/trmnlp#serverless-transforms) documents `transform.js` upload support.
-
-The included settings use TRMNL's documented OAuth provider keys. Live authorization, automatic refresh and the device's actual feature availability still require verification with the account. A missing refresh token may indicate a scope or application-type mismatch.
+The single ignored lint rule, `no_style_restyling_framework`, preserves the existing dashboard's custom typography. Other checks remain enabled.
 
 ## Optional API inventory helper
 
@@ -158,23 +99,6 @@ These are calculated curve values from live settings, not a verified direct expo
 Freshness uses only valid supply, hot-water and outdoor sensor timestamps, ignoring curve, operating-mode and target-setting timestamps. This fixes false stale warnings caused by unchanged configuration. The default threshold remains 120 minutes. Sensor timestamps may themselves represent last changes rather than regular measurements, so their age does not prove an outage.
 
 Timestamps are formatted in the configured `time_zone`, defaulting to `Europe/Berlin`. Standard IANA zones and daylight-saving transitions are handled using `Intl.DateTimeFormat`; invalid zones fall back to UTC. Staleness always compares absolute timestamps and is unaffected by the display zone. An offline E-Ink screen cannot update its timestamp or stale badge until a new screen is rendered.
-
-## Development, previews and tests
-
-All development files live here; the `src/full.liquid` and `src/settings.yml` are the source plugin files. Build regenerates the three compact layouts from `full.liquid`, along with local preview files in ignored `auxiliary/output/`.
-
-From the repository root:
-
-```sh
-npm --prefix auxiliary ci
-npm --prefix auxiliary run build
-npm --prefix auxiliary test
-python auxiliary/package.py
-```
-
-Open `auxiliary/output/preview.html` locally. Its plugin-language selector demonstrates English and German with sample data or without a connection. All surrounding preview controls use English. `auxiliary/output/demo-data.json` is a synthetic API fixture; it is not shipped as live data. To preview in TRMNL, temporarily use Static strategy with this fixture, then restore Polling before live use.
-
-Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, electrical/thermal units and source separation, day-counter rollover and totals, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and live updates still require account verification; the user has confirmed successful OAuth authorization with PKCE enabled.
 
 ## Official references
 

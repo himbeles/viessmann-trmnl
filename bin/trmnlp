@@ -48,4 +48,4 @@ if ! [ -s "$RUN_IN_DOCKER" ]; then
     exit 1
 fi
 
-IMAGE="$IMAGE" exec bash "$RUN_IN_DOCKER" "$@"
+IMAGE=trmnl/trmnlp:v0.31.1

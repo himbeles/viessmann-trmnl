@@ -120,5 +120,5 @@ oauth_enabled: "true"
 oauth_authorize_url: https://iam.viessmann-climatesolutions.com/idp/v3/authorize
 oauth_token_url: https://iam.viessmann-climatesolutions.com/idp/v3/token
 oauth_scopes: IoT User offline_access
-oauth_pkce_enabled: "true"
+oauth_pkce_enabled: "yes"
 oauth_token_request_auth_method: body

@@ -1,99 +1,122 @@
 # Viessmann heat pump for TRMNL X
 
-A read-only TRMNL private plugin showing supply, hot-water and outdoor temperatures, heating-curve parameters, the configured operating mode, electrical consumption and thermal heat output. The full-screen layout plots a nonlinear E3 heating curve with six labelled outdoor-temperature points and the configured supply-temperature limit. Compact layouts show temperatures, targets and a prominent operating mode.
+A read-only heat-pump dashboard with supply, hot-water and outdoor temperatures, target temperatures, operating mode, a complete capped heating curve, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels, numbers and timestamps.
 
-The display defaults to **English**. Choose **Deutsch** in **Display language** for German labels, status messages, number formatting and timestamps.
+This project starts from the [official `trmnlp init` scaffold](https://github.com/usetrmnl/trmnlp). All four layouts render the same shared dashboard. There is no layout generator, custom preview server, JavaScript build step or deployment wrapper.
 
-## Requirements
+## Project structure
 
-- A TRMNL account with private-plugin access, such as the Developer add-on or a BYOD license.
-- A heat pump connected to ViCare and a Viessmann developer application with an OAuth Client ID and access to the required API features.
-- Your API installation ID, gateway serial number and device ID. These differ from the OAuth Client ID; the heat pump's serial number is not necessarily the gateway serial number.
+```text
+.github/workflows/trmnl.yml  # Workflow supplied by trmnlp init
+.trmnlp.yml                  # Local preview configuration and synthetic data
+.gitignore
+bin/trmnlp                  # Official launcher, pinned to v0.31.1
+src/
+  settings.yml              # Hosted plugin definition; existing target 510867
+  shared.liquid             # Shared dashboard, styles and translations
+  full.liquid               # Full-screen view
+  half_horizontal.liquid    # Horizontal mashup view
+  half_vertical.liquid      # Vertical mashup view
+  quadrant.liquid           # Quarter-screen view
+  transform.js              # Viessmann-specific Serverless data reduction and calculation
+tests/
+  plugin_spec.rb            # Native trmnlp/RSpec transform and layout tests
+auxiliary/                  # API debugging tools and implementation documentation
+```
 
-Feature availability depends on the device and API permissions. The initial mappings are candidates to verify against your device's feature response.
+The published plugin consists only of `src/`. `.trmnlp.yml`, synthetic preview data, tests and auxiliary tools are never uploaded by `trmnlp push`.
 
-## Update the existing plugin with trmnlp
+## Local preview
 
-The repository follows the [official trmnlp project structure](https://github.com/usetrmnl/trmnlp#readme): versioned plugin files are in `src/`, `.trmnlp.yml` configures the project, and `bin/trmnlp` is the official launcher. It uses an installed Ruby gem if available, otherwise Docker. The Docker image and CI gem are pinned to **0.31.1**. The launcher is derived from TRMNL's MIT-licensed template; its license is in [auxiliary/TRMNLP-LICENSE.txt](auxiliary/TRMNLP-LICENSE.txt).
+Install [Docker](https://docs.docker.com/get-docker/), or Ruby 4.0+ and `gem install trmnl_preview --version 0.31.1`. The Node Serverless transform also needs Node 24 when using the gem; the official Docker image includes it.
 
-The existing target is [plugin **510867**](https://trmnl.com/plugin_settings/510867/edit), recorded as `id` in `src/settings.yml`. Updating this instance avoids setting up another Viessmann OAuth connection.
-
-### Automatic updates from GitHub
-
-1. In your TRMNL account, open [Account → Developer](https://trmnl.com/account/developer/edit) and create an account API key. A scoped key needs profile/read/content access for the official CLI workflow.
-2. Open this repository's **Settings → Secrets and variables → Actions → New repository secret**.
-3. Name the secret **`TRMNL_API_KEY`** and enter the **TRMNL account API key**. This is a repository secret, not an environment secret, Viessmann Client ID or Viessmann access token.
-4. Open **Actions → TRMNL → Run workflow** on `main`. Future pushes to `main` also run it automatically.
-
-The workflow builds and tests the plugin, runs the official linter, builds a synthetic-data preview using the official Liquid runtime, and creates an import ZIP artifact. Once the key is configured, it updates the existing plugin. Without the secret, verification runs and deployment is explicitly skipped with a notice.
-
-The updater first uses `trmnlp clone` to download the current instance into an ignored temporary directory. It retains installed polling settings, OAuth settings, custom-field values and configured defaults, merges updated form definitions, and replaces the layouts and Node transform. After linting, it calls `trmnlp push --id 510867 --force`. It refuses a missing or mismatched plugin ID and deletes the temporary export afterward. TRMNL exports may redact polling headers; if the exported header is empty, the updater restores the public `Authorization=Bearer {{ oauth_access_token }}` template. The updater also enforces OAuth authentication with `oauth_enabled: "true"` and PKCE with the hosted selector value `oauth_pkce_enabled: "yes"`. These two hosted fields use different encodings; the local Ruby gem uses `true` for PKCE. Tokens and client credentials remain on TRMNL and are not added to repository source files. After deployment, GitHub resets plugin health and runs a real poll; a failed fetch or transform marks deployment as failed.
-
-The setup can be tested without a TRMNL key; live synchronization requires that key and has to be confirmed by the deployment job. Do not use **Import new** for routine updates to this connected instance.
-
-### Update from your computer
-
-Install Node.js 24 and either Docker or Ruby 4.0+ with `gem install trmnl_preview --version 0.31.1`. From the repository root:
+From the repository directory:
 
 ```sh
-npm --prefix auxiliary ci
+./bin/trmnlp serve
+```
+
+Open **http://localhost:4567**. The standard trmnlp interface provides live reloading, device selection, mashup layouts, data inspection and screenshots. Select TRMNL X / v2 for the intended full-screen size. Change `custom_fields.language` in `.trmnlp.yml` to `de` to preview German.
+
+The checked-in `.trmnlp.yml` disables network polling locally with an empty polling URL override and supplies a clearly labelled synthetic fixture. The fixture's timestamps are from **2026-10-18**; older sample energy counters correctly become unavailable on later dates. The hosted plugin continues to use live Polling and its saved configuration.
+
+For Podman, run the official image directly; the upstream launcher checks for Docker or a local gem:
+
+```sh
+podman run --rm -it \
+  -p 127.0.0.1:4567:4567 \
+  -v "$PWD:/plugin" \
+  docker.io/trmnl/trmnlp:v0.31.1 serve --bind 0.0.0.0
+```
+
+Generate HTML or run the native tests:
+
+```sh
+./bin/trmnlp build                 # _build/*.html
+./bin/trmnlp test --report report  # report/index.html and rendered PNGs
+./bin/trmnlp lint
+```
+
+`trmnlp test` uses the official Ruby Liquid engine, Node transform runner, mocked input and frozen clock. Docker includes Firefox and the screenshot tools; gem users should install the [upstream test prerequisites](https://github.com/usetrmnl/trmnlp#installing-via-rubygems). Tests cover all four layouts in English and German, temperatures and targets, nonlinear curves and caps, source/units of electricity and heat, daily rollover, sensor freshness, DST and missing data.
+
+## Publish and update
+
+The existing target is [plugin **510867**](https://trmnl.com/plugin_settings/510867/edit), recorded in `src/settings.yml`. Keep that ID when updating this instance. For another installation, deliberately change the ID, or omit it only for the first push that should create a new plugin.
+
+```sh
 ./bin/trmnlp login
-node auxiliary/deploy.mjs --dry-run
-node auxiliary/deploy.mjs --yes
+./bin/trmnlp push
 ```
 
-`login` stores the TRMNL API key in the official CLI's local configuration. Alternatively set `TRMNL_API_KEY` in your shell environment. No Viessmann credential needs to be re-entered for an update. The dry run reads the installed instance and validates the merged update without uploading it.
+The official CLI uploads the source directly. Device identifiers and the Viessmann Client ID/tokens remain in the installed TRMNL instance; do not put them in Git. `src/settings.yml` includes the complete public OAuth configuration and the correct hosted field values:
 
-Use this helper for updates that retain saved instance settings. A direct `trmnlp push` uploads the versioned settings as well as code. Before changing the target plugin, clone its actual settings and verify its ID; never remove the ID to update an existing instance, because the CLI creates a new plugin when no target is provided.
+```yaml
+oauth_enabled: "true"
+oauth_pkce_enabled: "yes"
+polling_headers: "Authorization=Bearer {{ oauth_access_token }}"
+```
 
-### Preview without an account connection
+These two hosted toggles use different encodings. Keep them as shown when editing the plugin definition. PKCE's hosted `yes` differs from the current Ruby gem's local OAuth `true`; the standard sample preview does not use OAuth.
+
+For a new plugin, the official `push` command handles creation and imports `shared.liquid` and `transform.js` together. If you need a manual import ZIP, use the system archive tool:
 
 ```sh
-npm --prefix auxiliary ci
-npm --prefix auxiliary run build
-node auxiliary/prepare-preview.mjs
-(cd auxiliary/output/preview-plugin && ../../../bin/trmnlp serve)
+zip -j viessmann-trmnl.zip src/*
 ```
 
-Open `http://localhost:4567`. This generated project uses synthetic Static Data and requires no OAuth login. The production plugin in `src/` remains on Polling. For the lightweight browser preview, open `auxiliary/output/preview.html` instead. Developer tools and debugging instructions remain in [auxiliary/](auxiliary/README.md).
+Import that flat ZIP through TRMNL's private-plugin importer. For routine updates, push to the existing ID.
 
-## Install
+## GitHub updates
 
-1. Clone or download this repository.
-2. From the repository directory, package the plugin with Python 3:
+The workflow is the one generated by `trmnlp init`, with the gem and container pinned to **0.31.1** and a final plugin-specific polling check:
 
-   ```sh
-   python auxiliary/package.py
-   ```
+1. Add the TRMNL **account API key** as the repository Actions secret **`TRMNL_API_KEY`**. It needs profile/read/content access; no Viessmann tokens are needed in GitHub.
+2. Push to `main`. The official workflow lints, runs `trmnlp test` in its Docker image, uploads the test report, and runs `trmnlp push --force` after checks pass.
+3. The final smoke check resets health, requests a real poll and requires nonempty data plus a healthy state. It only checks the saved OAuth settings; it does not rewrite them.
 
-3. In TRMNL, open **Plugins → Private Plugin → Import new** and select `auxiliary/output/viessmann-trmnl-import.zip`.
-4. Open the imported plugin's settings and complete the configuration below.
+Pull requests run lint and tests without publishing. The scaffold's manual **Run workflow** can update test snapshots; publishing follows its standard push-to-`main` trigger.
 
-The packager includes `settings.yml`, the four Liquid layouts and `transform.js`, without a parent folder. The transform runs in TRMNL's Serverless Node runtime to reduce the large Viessmann response before storage and rendering. Do not import GitHub's repository ZIP directly. You can also ZIP these six files from `src/` manually; Node.js is not needed on your own computer to install or run the plugin.
+## Connect Viessmann
 
-## Configure the API connection
+You need a TRMNL account with private-plugin access (Developer edition or BYOD), a ViCare-connected heat pump, and a [Viessmann developer application](https://developer.viessmann-climatesolutions.com/start.html).
 
-1. Enter **API installation ID**, **API gateway serial number** and **API device ID** from your Viessmann API inventory. See the [API inventory guide](auxiliary/README.md#optional-api-inventory-helper) for the endpoints and optional debugging helper.
-2. In the plugin's OAuth settings, enter your Viessmann application's **Client ID**. Leave the Client Secret empty for a public PKCE client; follow your application's registration requirements for other client types.
-3. Copy the exact **OAuth Redirect URL displayed by your TRMNL plugin** into the Viessmann application's allowed redirect URIs.
-4. Check the imported OAuth settings:
+1. Open the plugin settings and enter your API **installation ID**, **gateway serial** and **device ID**. These are separate from the OAuth Client ID. The verified heating-device ID for this installation is `0`.
+2. Enter the Viessmann application's Client ID under OAuth settings. For a public PKCE client, leave the Client Secret empty.
+3. Register the exact **OAuth Redirect URL shown by your TRMNL plugin** in the Viessmann application.
+4. Check **Enable OAuth Authentication?** and **Enable PKCE?** are on. The provider configuration is:
 
    | Setting | Value |
    |---|---|
    | Authorization URL | `https://iam.viessmann-climatesolutions.com/idp/v3/authorize` |
-   | Token URL | `https://iam.viessmann-climatesolutions.com/idp/v3/token` |
+   | Token / refresh URL | `https://iam.viessmann-climatesolutions.com/idp/v3/token` |
    | Scopes | `IoT User offline_access` |
-   | PKCE | Enabled, S256 |
-   | Scope separator | Space |
+   | PKCE | S256 |
    | Token authentication / body format | body / form |
 
-5. Connect through TRMNL and authorize with Viessmann. Keep tokens in TRMNL's OAuth configuration, outside markup and Static Data.
-6. Save and select **Force Refresh**. Under **Edit Markup → Your Variables**, check the API response and compare the displayed readings with ViCare.
-7. Add the plugin to your playlist and select the desired full-screen or compact layout.
+5. Connect and authorize with Viessmann. Save, then **Force Refresh** and compare the readings with ViCare.
+6. Add the plugin to the device playlist and choose a layout.
 
-Check **Enable PKCE? → Yes** in the saved TRMNL settings, even after importing. If authorization reports **code challenge required**, enable PKCE, save, and start a new connection from TRMNL instead of refreshing the old authorization page.
-
-The plugin uses **Polling**, **GET**, and `Authorization=Bearer {{ oauth_access_token }}`. The default refresh interval is **60 minutes**, not seconds. No Home Assistant or additional server is required by this design. Live OAuth, token renewal and physical device rendering still need verification with your account.
+The default refresh interval is **60 minutes**, not seconds. The Serverless transform keeps the full Viessmann feature response below TRMNL's 100 KB limit and is uploaded by the official CLI. No additional server is required.
 
 ## Configuration fields
 
@@ -119,15 +142,6 @@ The plugin uses **Polling**, **GET**, and `Authorization=Bearer {{ oauth_access_
 | API feature: heat delivered today | Auto | Prefer device heat total, otherwise heating + DHW heat counters. |
 
 The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset and `heating.circuits.N.operating.modes.active` for operating mode. An operating mode is not a compressor-running indicator.
-
-## Troubleshooting and display limits
-
-- **Large payload / impaired plugin:** install the Serverless transform using the steps below. Resetting status alone does not reduce the response.
-- **No readings:** check OAuth, installation/gateway/device identifiers and the response under **Your Variables**.
-- **One reading is missing:** verify its feature name, `isEnabled` state and API availability. Missing or failed readings display a dash; they are not treated as zero.
-- **HTTP 401 / 403 / 429:** reconnect for authentication errors, check permissions for access errors, or wait for the API quota to reset.
-- **Redirect error:** compare the registered URI with the exact callback URL shown by your plugin.
-- **Stale or unknown timestamp:** check the sensor timestamp in your configured time zone. An offline E-Ink screen retains its last image and cannot update its stale badge until another screen is rendered.
 
 ## Electricity consumption and heat output
 
@@ -164,30 +178,13 @@ Heating and hot-water tiles include target values. A configured supply-target fe
 
 Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Invalid zones fall back to UTC.
 
-### Updating an existing connected plugin
+## Troubleshooting
 
-1. Replace the Serverless code with the latest [`transform.js`](src/transform.js), keeping **Node** selected.
-2. Replace the four layout tabs with the corresponding `.liquid` files in `src/`.
-3. Copy the `custom_fields` section from [`settings.yml`](src/settings.yml) into the plugin's Form Fields definition; retain existing field values and OAuth settings.
-4. Save, set your time zone, then **Force Refresh**. If the plugin is impaired, reset its status first.
+- **HTTP 401:** verify both OAuth toggles and the polling header above, then reconnect if necessary. A **code challenge required** error requires PKCE and a new authorization attempt.
+- **HTTP 403 / 429:** check Viessmann API permissions or wait for the quota to reset.
+- **Large payload:** verify **Edit Markup → Serverless** contains `src/transform.js` with **Node** selected. Reset plugin health and refresh after correcting it.
+- **Missing reading:** verify the feature name, enabled/error state and availability. Missing data displays a dash, never an invented zero.
+- **Stale/unknown timestamp:** compare the sensor's own API timestamp in the selected time zone. An offline E-Ink display keeps its last image until it renders again.
+- **Manual editor updates:** update **Shared**, all four layout tabs and **Serverless** together. Each layout now calls the dashboard defined in Shared.
 
-Keep `curve_points` blank for dynamic calculation. The [auxiliary guide](auxiliary/README.md#heating-curve-and-data-age) documents the model and optional reference-point override.
-
-## Upgrade an existing plugin for large API responses
-
-The full Viessmann feature list can exceed TRMNL's 100 KB polling limit. The included Serverless transform removes unrelated features, command definitions and unused metadata. It makes no additional API requests and preserves sensor timestamps, language and custom feature mappings.
-
-To update an already connected plugin without creating another instance:
-
-1. In TRMNL, open the existing plugin → **Edit Markup → Serverless**.
-2. Select **Node** and paste the complete contents of [`transform.js`](src/transform.js).
-3. Save the code and verify that **Serverless Language** in the plugin settings is **Node**.
-4. Keep your existing polling URL, identifiers, OAuth connection and PKCE setting.
-5. Select **Reset status** (German: **Status zurücksetzen**) to clear the impaired state, then **Force Refresh**.
-6. Check **Your Variables** and the rendered temperatures. If it fails, enable Debug Logs and inspect the Serverless error; avoid sharing tokens or the full raw response.
-
-New imports include the transform and `serverless_language: node`. Verify the Serverless tab contains the script after importing. If it is empty, paste `transform.js` manually using the same steps. The transform has been tested locally with oversized synthetic responses; the hosted run still requires verification in your TRMNL account.
-
-See [auxiliary documentation](auxiliary/README.md) for detailed feature mapping, API debugging, local previews and development commands. The [official TRMNL import guide](https://help.trmnl.com/en/articles/10542599-importing-and-exporting-private-plugins) describes the flat plugin ZIP format.
-
-Serverless references: [TRMNL Serverless setup](https://help.trmnl.com/en/articles/14130649-serverless) and [official CLI transform-file support](https://github.com/usetrmnl/trmnlp#serverless-transforms).
+See [auxiliary documentation](auxiliary/README.md) for feature mappings, API inventory and safe live-poll diagnostics. The [official trmnlp README](https://github.com/usetrmnl/trmnlp) documents the native commands and workflow.

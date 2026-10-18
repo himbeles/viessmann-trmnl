@@ -1,86 +1,66 @@
 name: TRMNL
-
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: Rewrite the snapshots in tests/snapshots and upload them
+        type: boolean
+        default: false
 
-permissions:
-  contents: read
-
-concurrency:
-  group: trmnl-${{ github.ref }}
-  cancel-in-progress: false
+env:
+  # The trmnlp image the tests run in. Pin a release (trmnl/trmnlp:v0.17.0) to keep runs repeatable.
+  TRMNLP_IMAGE: trmnl/trmnlp:v0.31.1
 
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: auxiliary/package-lock.json
-      - run: npm --prefix auxiliary ci
-      - run: npm --prefix auxiliary run build
-      - run: npm --prefix auxiliary test
-      - name: Verify generated layouts are current
-        run: git diff --exit-code -- src
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '4.0'
-      - run: gem install trmnl_preview --version 0.31.1 --no-document
-      - run: ./bin/trmnlp lint
-      - name: Build a preview with the official Liquid runtime and synthetic data
-        run: |
-          node auxiliary/prepare-preview.mjs
-          cd auxiliary/output/preview-plugin
-          ../../../bin/trmnlp build
-      - run: python auxiliary/package.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: viessmann-trmnl-import
-          path: auxiliary/output/viessmann-trmnl-import.zip
+          ruby-version: "4.0"
+      - run: gem install trmnl_preview --version 0.31.1
+      - run: trmnlp lint
 
-  deploy:
-    needs: check
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check TRMNL API key configuration
-        id: config
-        env:
-          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
-        run: |
-          if [ -n "$TRMNL_API_KEY" ]; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Add the TRMNL_API_KEY repository secret to enable updates to plugin 510867.'
-          fi
       - uses: actions/checkout@v6
-        if: steps.config.outputs.ready == 'true'
-      - uses: actions/setup-node@v4
-        if: steps.config.outputs.ready == 'true'
+      - name: trmnlp test
+        run: >
+          docker run --rm -e CI=true -e GITHUB_STEP_SUMMARY=/summary.md
+          -v "$PWD":/plugin -v "$GITHUB_STEP_SUMMARY":/summary.md "$TRMNLP_IMAGE"
+          test --report report ${{ inputs.update_snapshots && '--update' || '' }}
+      - if: always()
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '24'
-      - run: npm --prefix auxiliary ci
-        if: steps.config.outputs.ready == 'true'
+          name: trmnlp-report
+          path: report
+      - if: ${{ inputs.update_snapshots }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots
+          path: tests/snapshots
+
+  push:
+    # Take test out of needs to push to TRMNL even when the tests fail.
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
-        if: steps.config.outputs.ready == 'true'
         with:
-          ruby-version: '4.0'
-      - run: gem install trmnl_preview --version 0.31.1 --no-document
-        if: steps.config.outputs.ready == 'true'
-      - name: Update existing plugin and retain its saved settings
-        if: steps.config.outputs.ready == 'true'
+          ruby-version: "4.0"
+      - run: gem install trmnl_preview --version 0.31.1
+      - run: trmnlp push --force
         env:
           TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
-        run: node auxiliary/deploy.mjs --yes
-      - name: Reset health and verify live polling
-        if: steps.config.outputs.ready == 'true'
-        env:
-          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+      # Plugin-specific smoke check; publishing above uses the unmodified official command.
+      - name: Verify live Viessmann polling
         run: python3 auxiliary/refresh.py
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}

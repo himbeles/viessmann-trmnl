@@ -1,12 +1,105 @@
----
+# Native trmnlp sample-data preview. This file is local-only and is never uploaded.
+# Empty polling_url disables live polling; synthetic readings are from 2026-10-18.
 watch:
-  - src
   - .trmnlp.yml
+  - src
+custom_fields:
+  language: en
+  time_zone: Europe/Berlin
 time_zone: Europe/Berlin
-transform_runtime: enabled
-custom_fields: {}
 variables:
-  trmnl: {}
-# Preserve the existing custom dashboard typography rather than redesigning it.
+  demo: true
+  data:
+    - feature: heating.secondaryCircuit.sensors.temperature.supply
+      properties:
+        value:
+          value: 32.4
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.dhw.sensors.temperature.dhwCylinder
+      properties:
+        value:
+          value: 48.2
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.sensors.temperature.outside
+      properties:
+        value:
+          value: 7.8
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.heating.curve
+      properties:
+        slope:
+          value: 0.5
+        shift:
+          value: 2
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.operating.modes.active
+      properties:
+        value:
+          value: dhwAndHeating
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.operating.programs.active
+      properties:
+        value:
+          value: normal
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.operating.programs.normal
+      properties:
+        temperature:
+          value: 22
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.temperature.levels
+      properties:
+        min:
+          value: 20
+        max:
+          value: 50
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.dhw.temperature.main
+      properties:
+        value:
+          value: 50
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.compressors.0.power.consumption.current
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+      properties:
+        value:
+          value: 1.8
+          unit: kilowatt
+    - feature: heating.power.consumption.summary.total
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+      properties:
+        currentDay:
+          value: 12.34
+          unit: kilowattHour
+    - feature: heating.compressors.0.heat.production.current
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+      properties:
+        value:
+          value: 7.2
+          unit: kilowatt
+    - feature: heating.heat.production.total
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+      properties:
+        day:
+          value:
+            - 48.6
+            - 50
+          unit: kilowattHour
+  trmnl:
+    plugin_settings:
+      polling_url: ""
 ignored_lint_rules:
   - no_style_restyling_framework

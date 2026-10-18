@@ -1,7 +1,13 @@
-node_modules/
+# trmnlp build output
+_build/
+
+# trmnlp test --report output
+report/
+
+# Optional local tooling, exports and secrets
 .env
+node_modules/
 __pycache__/
 *.py[cod]
 auxiliary/output/
-_build/
 .trmnlp-deploy-*/

@@ -1,0 +1,106 @@
+{% template dashboard %}
+{% comment %}Read-only Viessmann data. No write commands or tokens in rendered markup.{% endcomment %}
+{% assign cfg = trmnl.plugin_settings.custom_fields_values %}
+{% assign language = cfg.language | default: 'en' %}
+{% if language == 'de' %}
+{% assign labels = 'Viessmann Wärmepumpe|Zuhause · Heizkreis|DEMO · Beispieldaten|Noch nicht verbunden|Daten veraltet|Zeitstand unbekannt|API-Daten|Heizung|Vorlauftemperatur|Warmwasser|Speichertemperatur|Außen|Außensensor|Heizkurve|Berechnete Heizkurve mit Vorlaufgrenzen|Außentemperatur °C|Berechnet · API-Einstellungen|Heizkurve benötigt Neigung,<br>Niveau und Raum-Solltemperatur.|Neigung|Niveau|Betriebsart|Heizen + Warmwasser|Nur Warmwasser|Heizen|Nicht verfügbar|Sensor-Zeitstand:|Messzeitpunkt fehlt|Werte unvollständig|Nur Anzeige|Soll|Raum-Solltemperatur|Referenzpunkte|Ungültige Kurvenpunkte: Berechnung angezeigt|Max.|API|Konfiguration|Grenze nicht verfügbar|berechnet|Strom aktuell|Strom heute|Gesamtes Gerät|Verdichter|Heizstab|Heizung + Warmwasser|Heizung + Warmwasser + Kühlung|Nur Heizung|Nur Warmwasser|Nur Kühlung|Stand:|Kein Tageswert für heute|Zeitstand unbekannt|Tageszähler der Anlage|Wärme aktuell|Wärme heute' | split: '|' %}
+{% assign decimal = ',' %}{% assign date_format = '%d.%m. %H:%M' %}
+{% else %}
+{% assign language = 'en' %}
+{% assign labels = 'Viessmann heat pump|Home · Heating circuit|DEMO · Sample data|Not connected|Stale data|Timestamp unknown|API data|Heating|Supply temperature|Hot water|Cylinder temperature|Outdoor|Outdoor sensor|Heating curve|Calculated heating curve with supply limits|Outdoor temperature °C|Calculated · API settings|The heating curve needs slope,<br>offset and a room setpoint.|Slope|Offset|Operating mode|Heating + hot water|Hot water only|Heating|Unavailable|Sensor timestamp:|Reading timestamp missing|Incomplete data|Read only|Target|Room setpoint|Reference points|Invalid curve points: showing calculation|Max.|API|Configuration|Limit unavailable|calculated|Electricity now|Electricity today|Whole device|Compressor|Auxiliary heater|Heating + hot water|Heating + hot water + cooling|Heating only|Hot water only|Cooling only|As of:|No counter for today|Timestamp unknown|Device day counter|Heat output now|Heat today' | split: '|' %}
+{% assign decimal = '.' %}{% assign date_format = '%Y-%m-%d %H:%M' %}
+{% endif %}
+{% assign features = data %}
+{% if IDX_0.data %}{% assign features = IDX_0.data %}{% endif %}
+{% assign circuit = cfg.circuit | default: '0' | append: '' %}
+{% assign prefix = 'heating.circuits.' | append: circuit %}
+{% assign supply_key = cfg.supply_feature | default: 'heating.secondaryCircuit.sensors.temperature.supply' %}
+{% assign water_key = cfg.water_feature | default: 'heating.dhw.sensors.temperature.dhwCylinder' %}
+{% assign outside_key = cfg.outside_feature | default: 'heating.sensors.temperature.outside' %}
+{% assign curve_key = prefix | append: '.heating.curve' %}
+{% assign mode_key = prefix | append: '.operating.modes.active' %}
+{% assign supply = nil %}{% assign water = nil %}{% assign outside = nil %}
+{% assign slope = nil %}{% assign shift = nil %}{% assign mode = nil %}
+{% assign found = 0 %}
+{% for f in features %}
+  {% assign used = false %}
+  {% if f.isEnabled != false %}
+    {% case f.feature %}
+      {% when supply_key %}
+        {% if f.properties.value.value != nil and f.properties.status.value != 'error' %}
+          {% assign supply = f.properties.value.value %}{% assign used = true %}
+        {% endif %}
+      {% when water_key %}
+        {% if f.properties.value.value != nil and f.properties.status.value != 'error' %}
+          {% assign water = f.properties.value.value %}{% assign used = true %}
+        {% endif %}
+      {% when outside_key %}
+        {% if f.properties.value.value != nil and f.properties.status.value != 'error' %}
+          {% assign outside = f.properties.value.value %}{% assign used = true %}
+        {% endif %}
+      {% when curve_key %}
+        {% assign slope = f.properties.slope.value %}{% assign shift = f.properties.shift.value %}
+        {% if slope != nil or shift != nil %}{% assign used = true %}{% endif %}
+      {% when mode_key %}
+        {% assign mode = f.properties.value.value %}
+        {% if mode != nil %}{% assign used = true %}{% endif %}
+    {% endcase %}
+  {% endif %}
+  {% if used %}{% assign found = found | plus: 1 %}{% endif %}
+{% endfor %}
+<style>
+  .vp{height:100%;width:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:3%;gap:2.4%;font-family:Arial,sans-serif;color:#000;background:#fff}
+  .vp *{box-sizing:border-box}.vp-head{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #000;padding-bottom:1.6%;gap:12px}
+  .vp-brand{font-size:clamp(15px,2.2vw,26px);font-weight:800;letter-spacing:-.04em}.vp-kicker{font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+  .vp-badge{border:2px solid #000;border-radius:4px;padding:5px 8px;font-size:12px;font-weight:bold;text-align:center}
+  .vp-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:2px solid #000;padding:1% 0 2.5%}
+  .vp-metric{padding:0 8%;border-right:1px solid #000}.vp-metric:first-child{padding-left:0}.vp-metric:last-child{border:0}
+  .vp-label{font-size:14px;font-weight:bold}.vp-value{font-size:clamp(32px,6.2vw,76px);font-weight:700;letter-spacing:-.06em;line-height:1.2;white-space:nowrap}.vp-unit{font-size:.36em;letter-spacing:0;margin-left:4px}.vp-note{font-size:12px;line-height:1.4}
+  .vp-bottom{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:5%;flex:1;min-height:0}.vp-chart{display:flex;flex-direction:column;min-height:0}.vp-chart svg{width:100%;flex:1;min-height:0}.vp-params{border-left:1px solid #000;padding-left:12%;display:flex;flex-direction:column;justify-content:space-evenly}.vp-param{font-size:32px;font-weight:bold;line-height:1.25}
+  .vp-mode{font-size:26px;font-weight:750;line-height:1.15;padding:0 0 1%;border-bottom:1px solid #000}.vp-mode-label{font-size:12px;font-weight:400;margin-right:12px}.vp-target{font-size:15px;font-weight:700;margin-top:4px}.vp-points{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;font-size:12px}.vp-point{white-space:nowrap}.vp-compact .vp-mode{font-size:20px}.vp-small .vp-mode{font-size:18px}.vp-small .vp-mode-label{display:none}.vp-small .vp-metric{flex-wrap:wrap}.vp-small .vp-target{width:100%;text-align:right;font-size:11px}
+  .vp-energy{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4%;border-bottom:1px solid #000;padding-bottom:1%}.vp-energy-value{font-size:28px;font-weight:750;line-height:1.1}.vp-energy-note{font-size:11px;line-height:1.25}.vp-small .vp-energy-value{font-size:20px}.vp-small .vp-energy-note{font-size:9px}.vp-small .vp-energy .vp-label{font-size:11px}
+  .vp-footer{display:flex;justify-content:space-between;gap:12px;font-size:11px;border-top:1px solid #000;padding-top:1.2%}.vp-empty{flex:1;display:flex;align-items:center;justify-content:center;border:1px dashed #000;margin-top:8px;text-align:center;font-size:14px;padding:16px}
+  .vp-compact .vp-bottom{display:none}.vp-compact .vp-metrics{flex:1;align-items:center}.vp-small .vp-metrics{grid-template-columns:1fr;gap:5px}.vp-small .vp-metric{display:flex;justify-content:space-between;align-items:center;border:0;padding:0}.vp-small .vp-value{font-size:28px}.vp-small .vp-metric .vp-note{display:none}.vp-small .vp-kicker{display:none}.vp-small .vp-footer{font-size:10px}.vp-small .vp-brand{font-size:16px}
+  .vp-status{display:grid;grid-template-columns:1fr 2.8fr;gap:3%;align-items:center;border-bottom:1px solid #000;padding-bottom:1%}.vp-status .vp-mode,.vp-status .vp-energy{border:0;padding:0}.vp-mode-label{display:block;margin:0 0 3px}.vp-small .vp-status{grid-template-columns:1fr 2.3fr;gap:2%}.vp-small .vp-energy-asof{display:none}.vp-small .vp-metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:0}.vp-small .vp-metrics .vp-metric{display:block;padding:0 4%;border-right:1px solid #000}.vp-small .vp-metrics .vp-metric:first-child{padding-left:0}.vp-small .vp-metrics .vp-metric:last-child{border:0}.vp-small .vp-value{font-size:24px}.vp-small .vp-metrics .vp-label{font-size:11px}.vp-small .vp-target{text-align:left;font-size:10px}
+  .vp-energy .vp-label{font-size:12px}.vp-energy-value{font-size:26px}.vp-small .vp-energy{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:7px}
+</style>
+<div class="vp{% if variant != 'full' %} vp-compact{% endif %}{% if variant == 'half_vertical' or variant == 'quadrant' %} vp-small{% endif %}" lang="{{ language }}">
+  <div class="vp-head"><div><div class="vp-kicker">{{ labels[1] }} {{ circuit | escape }}</div><div class="vp-brand">{{ labels[0] }}</div></div>
+    <div class="vp-badge">{% if demo %}{{ labels[2] }}{% elsif found == 0 %}{{ labels[3] }}{% elsif freshness.stale %}{{ labels[4] }}{% elsif freshness.missing_time %}{{ labels[5] }}{% else %}{{ labels[6] }}{% endif %}</div>
+  </div>
+  <div class="vp-metrics">
+    <div class="vp-metric"><div class="vp-label">{{ labels[7] }}</div><div class="vp-value">{% if supply != nil %}{{ supply | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[8] }}</div><div class="vp-target">{{ labels[29] }}{% if setpoints.supply_calculated %} ({{ labels[37] }}){% endif %}: {% if setpoints.supply != nil %}{{ setpoints.supply | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[9] }}</div><div class="vp-value">{% if water != nil %}{{ water | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[10] }}</div><div class="vp-target">{{ labels[29] }}: {% if setpoints.water != nil %}{{ setpoints.water | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[11] }}</div><div class="vp-value">{% if outside != nil %}{{ outside | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[12] }}</div></div>
+  </div>
+  <div class="vp-status">
+  <div class="vp-mode"><span class="vp-mode-label">{{ labels[20] }}</span>{% case mode %}{% when 'dhwAndHeating' %}{{ labels[21] }}{% when 'dhw' %}{{ labels[22] }}{% when 'standby' %}Standby{% when 'heating' %}{{ labels[23] }}{% when nil %}{{ labels[24] }}{% else %}{{ mode | escape }}{% endcase %}</div>
+  <div class="vp-energy">
+    <div><div class="vp-label">{{ labels[38] }}</div><div class="vp-energy-value">{% if energy.power_kw != nil %}{{ energy.power_kw | round: 2 | replace: '.', decimal }}{% else %}—{% endif %} <span class="vp-unit">kW</span></div><div class="vp-energy-note">{% case energy.power_scope %}{% when 'device' %}{{ labels[40] }}{% when 'compressor' %}{{ labels[41] }}{% when 'heater' %}{{ labels[42] }}{% else %}{{ labels[24] }}{% endcase %}{% if energy.power_stale %} · {{ labels[4] }}{% endif %}</div><div class="vp-energy-note vp-energy-asof">{% if energy.power_updated %}{{ labels[48] }} {{ energy.power_updated | escape }}{% elsif energy.power_kw != nil %}{{ labels[50] }}{% endif %}</div></div>
+    <div><div class="vp-label">{{ labels[39] }}</div><div class="vp-energy-value">{% if energy.today_kwh != nil %}{{ energy.today_kwh | round: 2 | replace: '.', decimal }}{% else %}—{% endif %} <span class="vp-unit">kWh</span></div><div class="vp-energy-note">{% case energy.today_scope %}{% when 'device' %}{{ labels[40] }}{% when 'compressor' %}{{ labels[41] }}{% when 'heater' %}{{ labels[42] }}{% when 'heating_dhw' %}{{ labels[43] }}{% when 'heating_dhw_cooling' %}{{ labels[44] }}{% when 'heating' %}{{ labels[45] }}{% when 'dhw' %}{{ labels[46] }}{% when 'cooling' %}{{ labels[47] }}{% else %}{% if energy.today_outdated %}{{ labels[49] }}{% else %}{{ labels[24] }}{% endif %}{% endcase %}{% if energy.today_stale %} · {{ labels[4] }}{% endif %}</div><div class="vp-energy-note vp-energy-asof">{% if energy.today_updated %}{{ labels[48] }} {{ energy.today_updated | escape }}{% else %}{{ labels[51] }}{% endif %}</div></div>
+    <div><div class="vp-label">{{ labels[52] }}</div><div class="vp-energy-value">{% if heat.power_kw != nil %}{{ heat.power_kw | round: 2 | replace: '.', decimal }}{% else %}—{% endif %} <span class="vp-unit">kW</span></div><div class="vp-energy-note">{% case heat.power_scope %}{% when 'device' %}{{ labels[40] }}{% when 'compressor' %}{{ labels[41] }}{% when 'heater' %}{{ labels[42] }}{% else %}{{ labels[24] }}{% endcase %}{% if heat.power_stale %} · {{ labels[4] }}{% endif %}</div><div class="vp-energy-note vp-energy-asof">{% if heat.power_updated %}{{ labels[48] }} {{ heat.power_updated | escape }}{% elsif heat.power_kw != nil %}{{ labels[50] }}{% endif %}</div></div>
+    <div><div class="vp-label">{{ labels[53] }}</div><div class="vp-energy-value">{% if heat.today_kwh != nil %}{{ heat.today_kwh | round: 2 | replace: '.', decimal }}{% else %}—{% endif %} <span class="vp-unit">kWh</span></div><div class="vp-energy-note">{% case heat.today_scope %}{% when 'device' %}{{ labels[40] }}{% when 'compressor' %}{{ labels[41] }}{% when 'heater' %}{{ labels[42] }}{% when 'heating_dhw' %}{{ labels[43] }}{% when 'heating_dhw_cooling' %}{{ labels[44] }}{% when 'heating' %}{{ labels[45] }}{% when 'dhw' %}{{ labels[46] }}{% when 'cooling' %}{{ labels[47] }}{% else %}{% if heat.today_outdated %}{{ labels[49] }}{% else %}{{ labels[24] }}{% endif %}{% endcase %}{% if heat.today_stale %} · {{ labels[4] }}{% endif %}</div><div class="vp-energy-note vp-energy-asof">{% if heat.today_updated %}{{ labels[48] }} {{ heat.today_updated | escape }}{% else %}{{ labels[51] }}{% endif %}</div></div>
+  </div>
+  </div>
+  <div class="vp-bottom">
+    <div class="vp-chart"><div class="vp-label">{{ labels[13] }}</div>
+    {% if curve.points.size > 1 %}
+      <svg viewBox="0 0 460 210" role="img" aria-label="{% if curve.reference %}{{ labels[31] }}{% else %}{{ labels[14] }}{% endif %}" preserveAspectRatio="xMidYMid meet">
+        <path d="M48 20V156H434" fill="none" stroke="#000"/>
+        {% for tick in curve.ticks %}<path d="M48 {{ tick.y }}H434" fill="none" stroke="#000" stroke-dasharray="2 5"/><text x="40" y="{{ tick.y | plus: 4 }}" text-anchor="end" font-size="12">{{ tick.value | replace: '.', decimal }}</text>{% endfor %}
+        {% for tick in curve.x_ticks %}<text x="{{ tick.x }}" y="178" text-anchor="middle" font-size="12">{{ tick.value | replace: '.', decimal }}</text>{% endfor %}
+        <text x="6" y="14" font-size="12">°C</text><text x="235" y="204" text-anchor="middle" font-size="12">{{ labels[15] }}</text>
+        {% if curve.cap_y != nil %}<path d="M48 {{ curve.cap_y }}H434" stroke="#000" stroke-width="1.5" stroke-dasharray="7 4"/>{% endif %}
+        <polyline fill="none" stroke="#000" stroke-width="3" points="{{ curve.polyline | escape }}"/>
+        {% for point in curve.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.label %}3{% else %}1.5{% endif %}" fill="#000"/>{% endfor %}
+      </svg>
+      <div class="vp-points">{% for point in curve.points %}{% if point.label %}<span class="vp-point">{{ point.outdoor | replace: '.', decimal }}° → <b>{{ point.supply | replace: '.', decimal }}°</b></span>{% endif %}{% endfor %}</div>
+      <div class="vp-note">{% if curve.invalid_reference %}{{ labels[32] }}{% elsif curve.reference %}{{ labels[31] }}{% else %}{{ labels[16] }} · {% if curve.max_supply != nil %}{{ labels[33] }} {{ curve.max_supply | replace: '.', decimal }} °C ({% if curve.max_from_api %}{{ labels[34] }}{% else %}{{ labels[35] }}{% endif %}){% else %}{{ labels[36] }}{% endif %}{% endif %}</div>
+    {% else %}<div class="vp-empty">{{ labels[17] }}</div>{% endif %}
+    </div>
+    <div class="vp-params"><div><div class="vp-label">{{ labels[18] }}</div><div class="vp-param">{% if slope != nil %}{{ slope | replace: '.', decimal }}{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[19] }}</div><div class="vp-param">{% if shift != nil %}{{ shift | replace: '.', decimal }} K{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[30] }}</div><div class="vp-param">{% if setpoints.room != nil %}{{ setpoints.room | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div></div>
+  </div>
+  <div class="vp-footer"><span>{% if freshness.oldest_sensor %}{{ labels[25] }} {{ freshness.oldest_sensor | escape }}{% else %}{{ labels[26] }}{% endif %}</span><span>{% if found < 5 %}{{ labels[27] }}{% else %}{{ labels[28] }}{% endif %} · TRMNL X</span></div>
+</div>
+
+{% endtemplate %}

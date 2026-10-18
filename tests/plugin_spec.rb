@@ -1,0 +1,303 @@
+# frozen_string_literal: true
+
+require 'json'
+require 'yaml'
+
+RSpec.describe 'Viessmann heat pump' do
+  let(:now) { '2026-10-18T18:10:00Z' }
+  let(:device) { 'v2' }
+  let(:data) do
+    YAML.load_file(File.join(__dir__, '..', '.trmnlp.yml')).fetch('variables')
+        .reject { |key, _| key == 'trmnl' }.merge('demo' => false)
+  end
+
+  def feature(name)
+    data.fetch('data').find { |item| item['feature'] == name }
+  end
+
+  def transform(custom_fields = {}, payload: data, at: now, **fields)
+    run = trmnl.transform(data: payload, custom_fields: custom_fields.merge(fields), now: at, device:)
+    expect(run.error).to be_nil
+    run.data
+  end
+
+  def render(view = 'full', language = 'en', custom_fields: {}, payload: data)
+    trmnl.render(view:, data: payload, now:, device:, custom_fields: custom_fields.merge(language:))
+  end
+
+  def document(screen)
+    Nokogiri::HTML(screen.result.html)
+  end
+
+  %w[en de].each do |language|
+    %w[full half_horizontal half_vertical quadrant].each do |view|
+      it "renders #{view} in #{language} through the official Liquid runtime" do
+        screen = render(view, language)
+        expect(screen).to have_no_transform_error.and(have_no_leaked_text)
+        html = document(screen)
+        expect(html.at_css('.vp')['lang']).to eq(language)
+        expect(html.at_css('.vp-metrics').text).to include(language == 'de' ? '32,4' : '32.4')
+        expect(html.at_css('.vp-mode').text).to include(language == 'de' ? 'Heizen + Warmwasser' : 'Heating + hot water')
+        expect(html.at_css('.vp-energy').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '12.34'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
+        expect(html.at_css('.vp')['class'].include?('vp-compact')).to eq(view != 'full')
+        expect(html.at_css('.vp')['class'].include?('vp-small')).to eq(%w[half_vertical quadrant].include?(view))
+      end
+    end
+  end
+
+  it 'renders missing readings without inventing temperatures or a curve' do
+    html = document(render(payload: {}))
+    expect(html.at_css('.vp-badge').text).to include('Not connected')
+    expect(html.css('polyline')).to be_empty
+    expect(html.at_css('.vp-metrics').text).to include('—')
+  end
+
+  it 'renders unknown operating modes as escaped text' do
+    feature('heating.circuits.0.operating.modes.active')['properties']['value']['value'] = '<script>bad</script>'
+    html = document(render)
+    expect(html.at_css('.vp-mode').text).to include('<script>bad</script>')
+    expect(html.css('.vp-mode script')).to be_empty
+  end
+
+  it 'defaults to English for an unsupported language' do
+    expect(document(render('full', 'fr')).at_css('.vp')['lang']).to eq('en')
+  end
+
+  it 'keeps six labelled reference points on the nonlinear, capped E3 curve' do
+    curve = transform.fetch('curve')
+    labelled = curve.fetch('points').select { |point| point['label'] }
+    expect(labelled.map { |point| point['outdoor'] }).to eq([-30, -20, -10, 0, 10, 20])
+    expect(labelled.map { |point| point['supply'] }).to eq([50, 44.8, 40.3, 36, 31.3, 25.4])
+    expect(curve.fetch('points').size).to eq(51)
+    expect(curve.fetch('max_supply')).to eq(50)
+    expect(curve.fetch('max_from_api')).to be(true)
+  end
+
+  it 'updates the complete curve when API slope, room target and limits change' do
+    feature('heating.circuits.0.heating.curve')['properties']['slope']['value'] = 1.2
+    feature('heating.circuits.0.temperature.levels')['properties']['max']['value'] = 40
+    capped = transform.fetch('curve').fetch('points')
+    expect(capped.count { |point| point['supply'] == 40 }).to be > 5
+    expect(capped).to all(include('supply' => be <= 40))
+    feature('heating.circuits.0.operating.programs.normal')['properties']['temperature']['value'] = 24
+    expect(transform.fetch('curve').fetch('points')).not_to eq(capped)
+  end
+
+  it 'gives API limits precedence over the configured fallback' do
+    feature('heating.circuits.0.temperature.levels')['properties']['min']['value'] = 30
+    result = transform(max_supply_temperature: '35')
+    expect(result.dig('curve', 'max_supply')).to eq(50)
+    expect(result.dig('curve', 'points').last['supply']).to eq(30)
+    data['data'].reject! { |item| item['feature'].end_with?('.temperature.levels') }
+    result = transform(max_supply_temperature: '35')
+    expect(result.dig('curve', 'max_supply')).to eq(35)
+    expect(result.dig('curve', 'max_from_api')).to be(false)
+  end
+
+  it 'does not assume a missing room setpoint or supply limit' do
+    data['data'].reject! { |item| item['feature'].end_with?('.temperature.levels') }
+    expect(transform.dig('curve', 'max_supply')).to be_nil
+    data['data'].reject! { |item| item['feature'].end_with?('.operating.programs.normal') }
+    expect(transform['curve']).to be_nil
+  end
+
+  it 'keeps explicit supply, water and room targets separate' do
+    data['data'] << { 'feature' => 'custom.supply.target', 'properties' => { 'value' => { 'value' => 33 } } }
+    result = transform(supply_setpoint_feature: 'custom.supply.target')
+    expect(result.fetch('setpoints')).to include('supply' => 33, 'water' => 50, 'room' => 22)
+    expect(result.dig('setpoints', 'supply_calculated')).to be_nil
+  end
+
+  it 'marks a model-derived supply target as calculated' do
+    expect(transform.dig('setpoints', 'supply_calculated')).to be(true)
+    expect(document(render).at_css('.vp-target').text).to include('calculated')
+  end
+
+  it 'accepts reference points without labelling them as live API curve points' do
+    points = [-30, -20, -10, 0, 10, 20].zip([45, 45, 40, 35, 30, 22]).map { |outdoor, supply| { outdoor:, supply: } }
+    curve = transform(curve_points: JSON.generate(points)).fetch('curve')
+    expect(curve.fetch('reference')).to be(true)
+    expect(curve.fetch('points').size).to eq(6)
+    expect(curve.fetch('points').first['supply']).to eq(45)
+  end
+
+  it 'ignores old configuration timestamps when checking sensor freshness' do
+    data['data'].each { |item| item['timestamp'] = '2000-01-01T00:00:00Z' unless item['feature'].include?('.sensors.temperature.') }
+    expect(transform.fetch('freshness')).to include('stale' => false, 'missing_time' => false)
+  end
+
+  it 'uses the oldest temperature reading and the configured staleness threshold' do
+    expect(transform(stale_minutes: '5').dig('freshness', 'stale')).to be(true)
+    expect(transform(stale_minutes: '120').dig('freshness', 'stale')).to be(false)
+    feature('heating.sensors.temperature.outside')['timestamp'] = '2026-10-18T10:00:00Z'
+    expect(transform.dig('freshness', 'stale')).to be(true)
+  end
+
+  it 'marks missing sensor timestamps as unknown' do
+    feature('heating.sensors.temperature.outside').delete('timestamp')
+    expect(transform.dig('freshness', 'missing_time')).to be(true)
+  end
+
+  [['2026-01-15T12:00:00Z', '13:00'], ['2026-07-15T12:00:00Z', '14:00'],
+   ['2026-03-29T00:30:00Z', '01:30'], ['2026-03-29T01:30:00Z', '03:30']].each do |utc, local|
+    it "formats Europe/Berlin correctly at #{utc}" do
+      data['data'].each { |item| item['timestamp'] = utc }
+      expect(transform(time_zone: 'Europe/Berlin').dig('freshness', 'oldest_sensor')).to include(local)
+    end
+  end
+
+  it 'falls back to UTC for invalid zones without changing freshness' do
+    expect(transform(time_zone: 'America/New_York').dig('freshness', 'oldest_sensor')).to include('14:00')
+    result = transform(time_zone: 'invalid/timezone').fetch('freshness')
+    expect(result).to include('time_zone' => 'UTC', 'stale' => false)
+    expect(result.fetch('oldest_sensor')).to include('18:00')
+  end
+
+  it 'keeps zero, negative and disabled sensor readings distinct' do
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 0
+    feature('heating.sensors.temperature.outside')['properties']['value']['value'] = '-5.2'
+    feature('heating.dhw.sensors.temperature.dhwCylinder')['isEnabled'] = false
+    html = document(render)
+    expect(html.at_css('.vp-metrics').text).to include('0°C', '-5.2°C', '—°C')
+  end
+
+  it 'supports custom sensors, another circuit and multi-URL response wrappers' do
+    data['data'].each { |item| item['feature'].sub!('heating.circuits.0.', 'heating.circuits.1.') }
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['feature'] = 'custom.supply'
+    result = transform({ circuit: '1', supply_feature: 'custom.supply' }, payload: { 'IDX_0' => data })
+    expect(result.fetch('data').map { |item| item['feature'] }).to include('custom.supply', 'heating.circuits.1.heating.curve')
+    expect(result.dig('curve', 'max_supply')).to eq(50)
+  end
+
+  it 'reduces oversized feature payloads without retaining commands or credentials' do
+    data['data'].first['commands'] = { 'padding' => 'x' * 170_000, 'token' => 'SYNTHETIC_TOKEN_MUST_NOT_LEAK' }
+    data['data'] << { 'feature' => 'unrelated', 'properties' => { 'value' => { 'value' => 'x' * 170_000 } } }
+    output = JSON.generate(transform)
+    expect(output.bytesize).to be < 15_000
+    expect(output).not_to match(/commands|SYNTHETIC_TOKEN_MUST_NOT_LEAK|unrelated/)
+  end
+
+  it 'keeps electrical consumption and thermal production independent' do
+    result = transform
+    expect(result.fetch('energy')).to include('power_kw' => 1.8, 'today_kwh' => 12.34, 'power_scope' => 'compressor')
+    expect(result.fetch('heat')).to include('power_kw' => 7.2, 'today_kwh' => 48.6)
+  end
+
+  it 'prefers whole-device power over compressor-only power and converts watts' do
+    data['data'] << { 'feature' => 'heating.power.consumption.current', 'timestamp' => now,
+                      'properties' => { 'value' => { 'value' => 2400, 'unit' => 'watt' } } }
+    expect(transform.fetch('energy')).to include('power_kw' => 2.4, 'power_scope' => 'device')
+  end
+
+  it 'converts watt-hours and preserves zero consumption' do
+    feature('heating.compressors.0.power.consumption.current')['properties']['value']['value'] = 0
+    counter = feature('heating.power.consumption.summary.total')['properties']['currentDay']
+    counter.merge!('value' => 12340, 'unit' => 'wattHour')
+    expect(transform.fetch('energy')).to include('power_kw' => 0, 'today_kwh' => 12.34)
+  end
+
+  it 'does not infer absent thermal output from electrical power or COP' do
+    data['data'].reject! { |item| item['feature'].include?('.heat.production.') }
+    expect(transform.fetch('heat')).to include('power_kw' => nil, 'today_kwh' => nil)
+  end
+
+  it 'rejects wrong units, negative readings and yesterday counters' do
+    feature('heating.compressors.0.power.consumption.current')['properties']['value']['unit'] = 'celsius'
+    feature('heating.compressors.0.heat.production.current')['properties']['value']['value'] = -1
+    feature('heating.power.consumption.summary.total')['timestamp'] = '2026-10-17T23:00:00+02:00'
+    feature('heating.heat.production.total')['timestamp'] = '2026-10-17T23:00:00+02:00'
+    result = transform
+    expect(result.fetch('energy')).to include('power_kw' => nil, 'today_kwh' => nil)
+    expect(result.fetch('heat')).to include('power_kw' => nil, 'today_kwh' => nil)
+  end
+
+  it 'invalidates the previous local day at midnight even when UTC is still yesterday' do
+    result = transform({ time_zone: 'Europe/Berlin' }, at: '2026-10-18T22:30:00Z')
+    expect(result.dig('energy', 'today_kwh')).to be_nil
+    expect(result.dig('heat', 'today_kwh')).to be_nil
+  end
+
+
+  def reading(name, property, value, unit = 'kWh', timestamp: '2026-10-18T18:00:00Z')
+    { 'feature' => name, 'timestamp' => timestamp, 'isEnabled' => true,
+      'properties' => { property => { 'value' => value, 'unit' => unit } } }
+  end
+
+  def remove_energy_totals
+    data['data'].reject! { |item| item['feature'].match?(/\.(power\.consumption|heat\.production)\./) }
+  end
+
+  it 'never adds component counters to the reported device total' do
+    data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 10)
+    data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 4)
+    expect(transform.dig('energy', 'today_kwh')).to eq(12.34)
+  end
+
+  it 'sums heating and DHW and only adds valid cooling to electrical consumption' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 10)
+    data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 4)
+    expect(transform.fetch('energy')).to include('today_kwh' => 14, 'today_scope' => 'heating_dhw')
+    data['data'] << reading('heating.power.consumption.summary.cooling', 'currentDay', 2)
+    expect(transform.fetch('energy')).to include('today_kwh' => 16, 'today_scope' => 'heating_dhw_cooling')
+    data['data'].last['timestamp'] = '2026-10-17T18:00:00Z'
+    expect(transform.fetch('energy')).to include('today_kwh' => nil, 'today_outdated' => true)
+  end
+
+  it 'does not silently treat a missing DHW component as zero' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 10)
+    expect(transform.dig('energy', 'today_kwh')).to be_nil
+  end
+
+  it 'excludes cooling from the thermal heating and DHW fallback' do
+    remove_energy_totals
+    data['data'] << reading('heating.heat.production.summary.heating', 'currentDay', 28)
+    data['data'] << reading('heating.heat.production.summary.dhw', 'currentDay', 7)
+    data['data'] << reading('heating.heat.production.summary.cooling', 'currentDay', 3)
+    expect(transform.fetch('heat')).to include('today_kwh' => 35, 'today_scope' => 'heating_dhw')
+  end
+
+  it 'uses only the newest legacy day bin and preserves an actual zero' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.total', 'day', [7.5, 30, 40, 50])
+    data['data'] << reading('heating.heat.production.total', 'day', [0, 30])
+    expect(transform.dig('energy', 'today_kwh')).to eq(7.5)
+    expect(transform.dig('heat', 'today_kwh')).to eq(0)
+  end
+
+  it 'withholds counters with missing or invalid timestamps' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.total', 'day', [7.5, 30], timestamp: nil)
+    expect(transform.dig('energy', 'today_kwh')).to be_nil
+    data['data'].last['timestamp'] = 'not-a-date'
+    expect(transform.dig('energy', 'today_kwh')).to be_nil
+  end
+
+  it 'gives current power its own stale indicator without marking fresh temperatures stale' do
+    feature('heating.compressors.0.power.consumption.current')['timestamp'] = '2026-10-18T10:00:00Z'
+    result = transform
+    expect(result.fetch('energy')).to include('power_kw' => 1.8, 'power_stale' => true, 'today_stale' => false)
+    expect(result.dig('freshness', 'stale')).to be(false)
+  end
+
+  it 'uses configured electrical and thermal overrides with their own component scopes' do
+    data['data'] << reading('heating.heatingRod.power.consumption.current', 'value', 3000, 'W')
+    data['data'] << reading('heating.heatingRod.heat.production.dhw', 'day', [2500, 3000], 'Wh')
+    result = transform(current_power_feature: 'heating.heatingRod.power.consumption.current',
+                       daily_heat_feature: 'heating.heatingRod.heat.production.dhw')
+    expect(result.fetch('energy')).to include('power_kw' => 3, 'power_scope' => 'heater')
+    expect(result.fetch('heat')).to include('today_kwh' => 2.5, 'today_scope' => 'heater')
+    result = transform(current_power_feature: 'heating.compressors.0.heat.production.current',
+                       daily_heat_feature: 'heating.power.consumption.summary.total')
+    expect(result.dig('energy', 'power_kw')).to be_nil
+    expect(result.dig('heat', 'today_kwh')).to be_nil
+  end
+
+  it 'keeps the existing plugin target and the two different hosted OAuth encodings' do
+    settings = YAML.load_file(File.join(__dir__, '..', 'src', 'settings.yml'))
+    expect(settings).to include('id' => 510867, 'strategy' => 'polling', 'serverless_language' => 'node',
+                               'oauth_enabled' => 'true', 'oauth_pkce_enabled' => 'yes',
+                               'polling_headers' => 'Authorization=Bearer {{ oauth_access_token }}')
+  end
+end

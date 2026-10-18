@@ -1,1 +1,0 @@
-{"name":"viessmann-trmnl","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","build":"node build.mjs"},"devDependencies":{"liquidjs":"10.21.1","yaml":"2.8.1"}}

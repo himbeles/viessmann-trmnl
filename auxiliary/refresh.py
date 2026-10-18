@@ -29,14 +29,10 @@ def request(path, method='GET', data=None):
 def main():
     if '--debug' in sys.argv:
         request('/debug_logs', 'POST')
-    # The archive importer and the settings form use different boolean values.
-    # Write the hosted fields explicitly; never touch saved credentials/tokens.
-    request('/settings', 'PATCH', {'fields': {
-        'oauth_enabled': 'true',
-        'oauth_pkce_enabled': 'yes',
-        'polling_headers': 'Authorization=Bearer {{ oauth_access_token }}',
-    }})
-    print('Hosted OAuth and PKCE enabled; OAuth polling header restored.', flush=True)
+    details = request('/details')
+    settings = details.get('settings', {})
+    if settings.get('oauth_enabled') != 'true' or settings.get('oauth_pkce_enabled') != 'yes':
+        raise RuntimeError('Saved OAuth/PKCE settings are disabled; inspect the TRMNL settings page.')
     request('/health_resets', 'POST')
     print('Plugin health reset. Starting a real polling refresh.', flush=True)
     result = request('/refreshes', 'POST')
