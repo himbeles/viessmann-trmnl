@@ -45,6 +45,7 @@ function run(input) {
   const prefix = `heating.circuits.${circuit}`;
   const active = features.find(item => item?.feature === `${prefix}.operating.programs.active` && item.isEnabled !== false);
   const program = text(active?.properties?.value?.value, null, 80);
+  fields.set(circuitSupply, ['value', 'status']);
   fields.set(`${prefix}.circulation.pump`, ['status']);
   fields.set('heating.dhw.charging', ['active', 'status']);
   fields.set('heating.dhw.sensors.temperature.tankLoadSystem.supply', ['value', 'status']);
@@ -121,6 +122,7 @@ function run(input) {
       return: heatingActive ? result.return_reading.value : null },
     dhw: { active: dhwActive, supply: dhwActive ? value(dhwSupply) : null, return: dhwActive ? value(dhwReturn) : null }
   };
+  result.radiator = { circuit, supply: value(circuitSupply), target: value(`${prefix}.temperature`) };
   result.setpoints = { room, supply: value(settings.supply_setpoint_feature) ?? value(`${prefix}.temperature`), water: value(settings.water_setpoint_feature) };
 
   // Configuration timestamps describe setting changes, not sensor freshness.
@@ -307,6 +309,10 @@ function run(input) {
   if (result.temperatures.heating.return != null) rememberTime(Date.parse(valid(selectedReturn)?.timestamp));
 
   if (dhwActive) for (const name of [dhwSupply, dhwReturn]) {
+    if (value(name) != null) rememberTime(Date.parse(valid(name)?.timestamp));
+  }
+
+  for (const name of [circuitSupply, `${prefix}.temperature`]) {
     if (value(name) != null) rememberTime(Date.parse(valid(name)?.timestamp));
   }
 
@@ -497,7 +503,7 @@ function run(input) {
   }
   if (points.length) {
     const outdoor = value(settings.outside_feature);
-    const target = result.setpoints.supply;
+    const target = result.radiator.target;
     const readings = [target].filter(number => number != null);
     const minX = Math.min(points[0].outdoor, outdoor ?? points[0].outdoor);
     const maxX = Math.max(points[points.length - 1].outdoor, outdoor ?? points[points.length - 1].outdoor);

@@ -36,6 +36,8 @@ RSpec.describe 'Viessmann heat pump' do
         data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 4.34)
         data['data'] << reading('heating.heat.production.summary.heating', 'currentDay', 35)
         data['data'] << reading('heating.heat.production.summary.dhw', 'currentDay', 13.6)
+        data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 30.2 } } }
+        data['data'] << { 'feature' => 'heating.circuits.0.temperature', 'properties' => { 'value' => { 'value' => 32.4 } } }
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         html = document(screen)
@@ -47,7 +49,7 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.css('.vp-blocks > section').size).to eq(3)
         expect(html.at_css('.vp-water-block .vp-water').text).to include(language == 'de' ? '48,2' : '48.2')
         expect(html.at_css('.vp-heating-block > .vp-metrics .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
-        expect(html.at_css('.vp-plot-row > .vp-supply-target .vp-label').text).to eq(language == 'de' ? 'Vorlauf-Solltemperatur' : 'Supply target temperature')
+        expect(html.at_css('.vp-supply-readings > .vp-supply-target .vp-full-label').text).to eq(language == 'de' ? 'Vorlauf-Solltemperatur' : 'Supply target temperature')
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
@@ -255,7 +257,7 @@ RSpec.describe 'Viessmann heat pump' do
       html = document(render)
       expect(html.css('.vp-water-flows')).to be_empty
       expect(html.at_css('.vp').text).not_to include('Heat pump return', '47 °C', '42 °C')
-      expect(html.at_css('.vp-curve-readings').text).to include('32.4') # target stays visible
+      expect(html.at_css('.vp-supply-target .vp-value').text).to include('—') # no circuit target in this payload
     end
   end
 
@@ -266,6 +268,34 @@ RSpec.describe 'Viessmann heat pump' do
     feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'dhw'
     expect(transform.fetch('temperatures').fetch('dhw')).to include('supply' => nil, 'return' => nil)
     expect(document(render).css('.vp-water-flows')).to be_empty
+  end
+
+  it 'displays only radiator-circuit actual and target, including when idle' do
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 45
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 26 } } }
+    data['data'] << { 'feature' => 'heating.circuits.0.temperature', 'properties' => { 'value' => { 'value' => 26.5 } } }
+    feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'standby'
+    result = transform(supply_feature: 'heating.secondaryCircuit.sensors.temperature.supply')
+    expect(result.fetch('radiator')).to include('supply' => 26, 'target' => 26.5)
+    html = document(render)
+    expect(html.at_css('.vp-supply-actual').text).to include('26°C')
+    expect(html.at_css('.vp-supply-target').text).to include('26.5°C')
+    expect(html.at_css('.vp-supply-readings').text).not_to include('45')
+  end
+
+  it 'does not use heat-pump/custom sensors or the curve estimate as radiator readings' do
+    data['data'] << { 'feature' => 'custom.target', 'properties' => { 'value' => { 'value' => 45 } } }
+    expect(transform(supply_setpoint_feature: 'custom.target').fetch('radiator')).to include('supply' => nil, 'target' => nil)
+    expect(document(render).at_css('.vp-supply-readings').text.scan('—').size).to eq(2)
+    expect(transform.dig('curve', 'target')).to be_nil
+  end
+
+  it 'selects actual and target from the configured radiator circuit and rejects disconnected readings' do
+    data['data'] << { 'feature' => 'heating.circuits.1.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 31 } } }
+    data['data'] << { 'feature' => 'heating.circuits.1.temperature', 'properties' => { 'value' => { 'value' => 30 } } }
+    expect(transform(circuit: '1').fetch('radiator')).to include('circuit' => '1', 'supply' => 31, 'target' => 30)
+    feature('heating.circuits.1.sensors.temperature.supply')['properties']['status'] = { 'value' => 'disconnected' }
+    expect(transform(circuit: '1').dig('radiator', 'supply')).to be_nil
   end
 
   it 'reads daily heating and water separately alongside whole-device totals' do
