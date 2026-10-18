@@ -36,6 +36,12 @@ variables:
           value: 2
       isEnabled: true
       timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.circuits.0.circulation.pump
+      properties:
+        status:
+          value: "on"
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
     - feature: heating.circuits.0.operating.modes.active
       properties:
         value:

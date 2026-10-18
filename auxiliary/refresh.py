@@ -50,12 +50,19 @@ def main():
     # an API response format, not an empty feature list on the dashboard.
     feature_count = len(features) if isinstance(features, list) else (
         features.get('count', 0) if isinstance(features, dict) and features.get('_compacted') else 0)
+    # Only dashboard readings; never log raw settings, tokens or the full response.
     health = request('/logs?limit=1').get('health', {})
     print(json.dumps({
         'refresh_status': result.get('status'),
         'refresh_success': result.get('success'),
         'transform_warning_present': bool(result.get('warning')),
         'feature_count': feature_count,
+        'dashboard_signals': {
+            'heating_state': variables.get('heating', {}).get('state'),
+            'supply_scope': variables.get('supply_scope'),
+            'supply_temperature_c': variables.get('supply_reading', {}).get('value'),
+            'supply_target_c': variables.get('setpoints', {}).get('supply'),
+        },
         'health_state': health.get('state'),
         'error_retry_count': health.get('error_retry_count'),
         'last_refresh': health.get('last_refresh'),

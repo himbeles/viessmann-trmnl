@@ -42,7 +42,8 @@ custom_fields:
   - keyname: supply_feature
     name: "API feature: supply temperature"
     field_type: string
-    default: heating.secondaryCircuit.sensors.temperature.supply
+    default: auto
+    description: "Auto prefers the selected heating circuit sensor; heat-pump supply is a labelled fallback. Enter a feature name to use a custom sensor."
     optional: true
   - keyname: water_feature
     name: "API feature: hot-water cylinder temperature"

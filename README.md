@@ -1,6 +1,6 @@
 # Viessmann heat pump for TRMNL X
 
-A read-only heat-pump dashboard with supply, hot-water and outdoor temperatures, target temperatures, operating mode, a complete capped heating curve, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels, numbers and timestamps.
+A read-only heat-pump dashboard with supply, hot-water and outdoor temperatures, target temperatures, a heating on/off badge, a complete capped heating curve with measured/target supply markers, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels and numbers. Dates follow the configured time zone’s regional format.
 
 This project starts from the [official `trmnlp init` scaffold](https://github.com/usetrmnl/trmnlp). All four layouts render the same shared dashboard. There is no layout generator, custom preview server, JavaScript build step or deployment wrapper.
 
@@ -128,11 +128,11 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 | API gateway serial number | Required | Gateway identifier from the API inventory. |
 | API device ID | `0` | Confirm against the API device list; `0` is the verified heating device for the supplied Vitocal inventory. |
 | Heating circuit | `0` | First API heating circuit; select another index if needed. |
-| API feature: supply temperature | `heating.secondaryCircuit.sensors.temperature.supply` | Feature used for the supply reading. |
+| API feature: supply temperature | `auto` | Prefer `heating.circuits.N.sensors.temperature.supply`. If unavailable, use the secondary-circuit sensor and label it **Heat pump supply**. A custom feature can override selection. The previous default is treated as `auto` for existing installs. |
 | API feature: hot-water cylinder temperature | `heating.dhw.sensors.temperature.dhwCylinder` | Feature used for the cylinder reading. |
 | API feature: outdoor temperature | `heating.sensors.temperature.outside` | Feature used for the outdoor reading. |
 | Mark readings stale after (minutes) | `120` | Age threshold for the oldest valid temperature sensor timestamp; configuration timestamps are excluded. |
-| API feature: supply setpoint | Blank | Optional direct supply-target feature. If unavailable, the target is calculated from the curve. |
+| API feature: supply setpoint | Blank | Optional direct supply-target feature. Otherwise use `heating.circuits.N.temperature`, then the curve if neither is available. |
 | API feature: configured hot-water target | `heating.dhw.temperature.main` | Configured main hot-water target; not necessarily the active scheduled target. |
 | Maximum supply temperature (fallback, °C) | Blank | Used only when the API does not expose the circuit maximum; API values take precedence. |
 | Heating curve reference points | Blank | Optional JSON reference pairs that override the dynamic model. Leave blank for live calculation. |
@@ -141,7 +141,7 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 | API feature: current thermal output | Auto | Prefer whole-device heat output, otherwise compressor 0; scope is shown. |
 | API feature: heat delivered today | Auto | Prefer device heat total, otherwise heating + DHW heat counters. |
 
-The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset and `heating.circuits.N.operating.modes.active` for operating mode. An operating mode is not a compressor-running indicator.
+The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset. The top-right **Heating on/off** badge uses `heating.circuits.N.circulation.pump.properties.status.value`; it indicates circuit circulation, not compressor operation or the selected operating mode. Missing, disabled or unrecognized status shows **Heating unknown**. No separate operating-mode field is displayed.
 
 ## Electricity consumption and heat output
 
@@ -172,9 +172,11 @@ The graph is recalculated on each refresh from the API's slope, offset, selected
 
 The API features used here expose parameters, not a directly sampled ViCare curve. Values should be compared with the app; firmware-specific control and filtered outdoor temperatures can cause differences. Room target comes from the active heating program, with a normal-program fallback for plotting. The curve is unavailable if no room target is supplied. There is no assumed 20 °C room target.
 
-The circuit maximum is read from `heating.circuits.N.temperature.levels.properties.max.value`, with its minimum applied when available. If the maximum is unavailable, the chart says **Limit unavailable**. You can enter the device's current maximum in the fallback field (the supplied screenshot showed 50 °C); it is labelled as configuration and is overridden when the API provides a maximum. Do not use an API command's allowed input range as the configured maximum.
+The circuit maximum is read from `heating.circuits.N.temperature.levels.properties.max.value`, with its minimum applied when available. If the maximum is unavailable, the chart says **Limit unavailable**. You can enter the device's current maximum in the fallback field (the supplied screenshot showed 50 °C); it is overridden when the API provides a maximum. Do not use an API command's allowed input range as the configured maximum.
 
-Heating and hot-water tiles include target values. A configured supply-target feature is preferred; otherwise a model-derived target at the current outdoor reading is used. Calculation and API-source annotations are omitted from the display. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The full layout also shows the active room target. The plugin never changes heat-pump settings.
+The heating curve shows measured supply as a filled dot and target supply as an outlined diamond, both at the current outdoor temperature, with labels beside the graph. The chart expands its axes to retain readings outside the curve or its cap; measurements are never clamped to the target. A configured supply-target feature is preferred, then the live circuit target `heating.circuits.N.temperature`, then a model-derived target at the current outdoor reading. Missing outdoor temperature omits the markers, while available temperatures remain in the legend. Hot water retains its tile and target. Calculation and API-source annotations are omitted from the display. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The full layout also shows the active room target. The plugin never changes heat-pump settings.
+
+The old supply default read `heating.secondaryCircuit.sensors.temperature.supply`, which is the heat pump’s secondary-side sensor, not the selected heating circuit’s supply. These can differ during hot-water production or with buffering/mixing. Automatic selection now prefers `heating.circuits.N.sensors.temperature.supply`; the fallback is explicitly labeled. A large actual/target difference cannot establish overheating without knowing the sensor location and operating state. [PyViCare’s circuit and secondary-circuit getters](https://github.com/openviess/PyViCare/blob/588a107b78f61c8982e43439c91b268acfdd02a9/PyViCare/PyViCareHeatingDevice.py) document the separate features.
 
 **Why “Daten veraltet” appeared:** the previous implementation used the oldest timestamp across sensors, curve settings and mode. An unchanged curve or mode could therefore make the dashboard appear stale. Freshness now uses only valid supply, hot-water and outdoor sensor timestamps. Changing the time zone affects presentation, not age. A sensor's own API timestamp may still describe its last change rather than a new sample; an old timestamp alone does not prove the device is disconnected. Missing sensor timestamps are identified separately.
 

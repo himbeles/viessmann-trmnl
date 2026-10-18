@@ -8,10 +8,20 @@ function run(input) {
     ? value
     : typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
   const circuit = text(String(cfg.circuit ?? '0'), '0', 8);
+  const features = Array.isArray(source.IDX_0?.data) ? source.IDX_0.data : Array.isArray(source.data) ? source.data : [];
+  const circuitSupply = `heating.circuits.${circuit}.sensors.temperature.supply`;
+  const deviceSupply = 'heating.secondaryCircuit.sensors.temperature.supply';
+  const requestedSupply = text(cfg.supply_feature, 'auto');
+  // Migrate the previous default to automatic circuit-first selection.
+  const automaticSupply = requestedSupply === 'auto' || requestedSupply === deviceSupply;
+  const usableCircuitSupply = features.some(item => item?.feature === circuitSupply && item.isEnabled !== false
+    && !['error', 'disconnected', 'unavailable'].includes(item.properties?.status?.value)
+    && numeric(item.properties?.value?.value) != null);
+  const selectedSupply = automaticSupply ? (usableCircuitSupply ? circuitSupply : deviceSupply) : requestedSupply;
   const settings = {
     language: cfg.language === 'de' ? 'de' : 'en',
     circuit,
-    supply_feature: text(cfg.supply_feature, 'heating.secondaryCircuit.sensors.temperature.supply'),
+    supply_feature: selectedSupply,
     water_feature: text(cfg.water_feature, 'heating.dhw.sensors.temperature.dhwCylinder'),
     outside_feature: text(cfg.outside_feature, 'heating.sensors.temperature.outside'),
     stale_minutes: numeric(cfg.stale_minutes) ?? 120,
@@ -32,14 +42,15 @@ function run(input) {
     [`heating.circuits.${circuit}.heating.curve`, ['slope', 'shift']],
     [`heating.circuits.${circuit}.operating.modes.active`, ['value']]
   ]);
-  const features = Array.isArray(source.IDX_0?.data) ? source.IDX_0.data : Array.isArray(source.data) ? source.data : [];
   const prefix = `heating.circuits.${circuit}`;
   const active = features.find(item => item?.feature === `${prefix}.operating.programs.active` && item.isEnabled !== false);
   const program = text(active?.properties?.value?.value, null, 80);
+  fields.set(`${prefix}.circulation.pump`, ['status']);
   fields.set(`${prefix}.operating.programs.active`, ['value']);
   fields.set(`${prefix}.operating.programs.normal`, ['temperature']);
   fields.set(`${prefix}.operating.programs.normalHeating`, ['temperature']);
   fields.set(`${prefix}.temperature.levels`, ['min', 'max']);
+  fields.set(`${prefix}.temperature`, ['value', 'status']);
   if (program) fields.set(`${prefix}.operating.programs.${program}`, ['temperature']);
   if (settings.supply_setpoint_feature) fields.set(settings.supply_setpoint_feature, ['value', 'status']);
   fields.set(settings.water_setpoint_feature, ['value', 'status']);
@@ -67,10 +78,14 @@ function run(input) {
       plugin_settings: { custom_fields_values: settings }
     }
   };
-  const valid = name => data.find(item => item.feature === name && item.isEnabled && item.properties.status?.value !== 'error');
+  const valid = name => data.find(item => item.feature === name && item.isEnabled && !['error', 'disconnected', 'unavailable'].includes(item.properties.status?.value));
   const value = name => valid(name)?.properties?.value?.value ?? null;
   const room = program && program !== 'standby' ? valid(`${prefix}.operating.programs.${program}`)?.properties?.temperature?.value ?? null : null;
-  result.setpoints = { room, supply: value(settings.supply_setpoint_feature), water: value(settings.water_setpoint_feature) };
+  const pumpStatus = valid(`${prefix}.circulation.pump`)?.properties?.status?.value;
+  result.supply_reading = { feature: selectedSupply, value: value(selectedSupply) };
+  result.supply_scope = selectedSupply === circuitSupply ? 'circuit' : selectedSupply === deviceSupply ? 'heat_pump' : 'custom';
+  result.heating = { state: pumpStatus === 'on' || pumpStatus === 'off' ? pumpStatus : 'unknown' };
+  result.setpoints = { room, supply: value(settings.supply_setpoint_feature) ?? value(`${prefix}.temperature`), water: value(settings.water_setpoint_feature) };
 
   // Configuration timestamps describe setting changes, not sensor freshness.
   const sensors = [settings.supply_feature, settings.water_feature, settings.outside_feature].map(valid).filter(item => item && item.properties.value?.value != null);
@@ -405,9 +420,14 @@ function run(input) {
     }
   }
   if (points.length) {
-    const minX = points[0].outdoor, maxX = points[points.length - 1].outdoor;
-    const minY = Math.floor((Math.min(...points.map(point => point.supply)) - 2) / 5) * 5;
-    const maxY = Math.max(minY + 10, Math.ceil((Math.max(...points.map(point => point.supply), ...(!reference && maxSupply != null ? [maxSupply] : [])) + 2) / 5) * 5);
+    const outdoor = value(settings.outside_feature);
+    const measured = value(settings.supply_feature);
+    const target = result.setpoints.supply;
+    const readings = [measured, target].filter(number => number != null);
+    const minX = Math.min(points[0].outdoor, outdoor ?? points[0].outdoor);
+    const maxX = Math.max(points[points.length - 1].outdoor, outdoor ?? points[points.length - 1].outdoor);
+    const minY = Math.floor((Math.min(...points.map(point => point.supply), ...readings) - 2) / 5) * 5;
+    const maxY = Math.max(minY + 10, Math.ceil((Math.max(...points.map(point => point.supply), ...readings, ...(!reference && maxSupply != null ? [maxSupply] : [])) + 2) / 5) * 5);
     const round = number => Math.round(number * 10) / 10;
     const plotted = points.map(point => ({
       outdoor: point.outdoor, supply: round(point.supply),
@@ -415,7 +435,12 @@ function run(input) {
       y: round(156 - (point.supply - minY) / (maxY - minY) * 132),
       label: reference || point.outdoor % 10 === 0
     }));
+    const marker = temperature => outdoor == null || temperature == null ? null : {
+      x: round(48 + (outdoor - minX) / (maxX - minX) * 386),
+      y: round(156 - (temperature - minY) / (maxY - minY) * 132)
+    };
     result.curve = {
+      measured: marker(measured), target: marker(target),
       reference, room_setpoint: curveRoom, max_supply: !reference && limitsValid ? maxSupply : null, max_from_api: apiMax != null,
       cap_y: !reference && maxSupply != null && limitsValid ? round(156 - (maxSupply - minY) / (maxY - minY) * 132) : null,
       invalid_reference: Boolean(settings.curve_points) && !reference,

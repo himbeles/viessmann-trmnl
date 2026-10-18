@@ -37,10 +37,13 @@ RSpec.describe 'Viessmann heat pump' do
         html = document(screen)
         expect(html.at_css('.vp')['lang']).to eq(language)
         expect(html.at_css('.vp').to_html).not_to match(/\bAPI\b|calculated|berechnet|berechnung/i)
-        expect(html.css('.vp-badge')).to be_empty
+        expect(html.at_css('.vp-heating').text).to eq(language == 'de' ? 'Heizung an' : 'Heating on')
         expect(html.at_css('.vp').text).not_to match(/\b(?:CEST|CET|MESZ|MEZ|UTC|GMT)\b/)
-        expect(html.at_css('.vp-metrics').text).to include(language == 'de' ? '32,4' : '32.4')
-        expect(html.at_css('.vp-mode').text).to include(language == 'de' ? 'Heizen + Warmwasser' : 'Heating + hot water')
+        expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '32,4' : '32.4')
+        expect(html.css('.vp-metrics .vp-metric').size).to eq(2)
+        expect(html.at_css('.vp-supply-marker')).not_to be_nil
+        expect(html.at_css('.vp-target-marker')).not_to be_nil
+        expect(html.css('.vp-mode')).to be_empty
         expect(html.at_css('.vp-energy').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '12.34'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
         expect(html.at_css('.vp')['class'].include?('vp-compact')).to eq(view != 'full')
         expect(html.at_css('.vp')['class'].include?('vp-small')).to eq(%w[half_vertical quadrant].include?(view))
@@ -55,11 +58,65 @@ RSpec.describe 'Viessmann heat pump' do
     expect(html.at_css('.vp-metrics').text).to include('—')
   end
 
-  it 'renders unknown operating modes as escaped text' do
-    feature('heating.circuits.0.operating.modes.active')['properties']['value']['value'] = '<script>bad</script>'
+  it 'does not infer heating activity from the selected operating mode' do
+    data['data'].reject! { |item| item['feature'].end_with?('.circulation.pump') }
+    expect(transform.dig('heating', 'state')).to eq('unknown')
+    expect(document(render).at_css('.vp-heating').text).to eq('Heating unknown')
+  end
+
+  it 'shows heating off independently of a heating-enabled mode' do
+    feature('heating.circuits.0.circulation.pump')['properties']['status']['value'] = 'off'
+    expect(transform.dig('heating', 'state')).to eq('off')
+    expect(document(render).at_css('.vp-heating').text).to eq('Heating off')
+  end
+
+  it 'does not trust disabled or erroneous pump status' do
+    pump = feature('heating.circuits.0.circulation.pump')
+    pump['isEnabled'] = false
+    expect(transform.dig('heating', 'state')).to eq('unknown')
+    pump['isEnabled'] = true
+    pump['properties']['status']['value'] = '<script>on</script>'
+    expect(transform.dig('heating', 'state')).to eq('unknown')
+  end
+
+  it 'prefers circuit supply and the live circuit target over heat-pump supply and the model' do
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 45
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 28 } } }
+    data['data'] << { 'feature' => 'heating.circuits.0.temperature', 'properties' => { 'value' => { 'value' => 27 } } }
+    result = transform(supply_feature: 'heating.secondaryCircuit.sensors.temperature.supply')
+    expect(result.dig('supply_reading', 'feature')).to eq('heating.circuits.0.sensors.temperature.supply')
+    expect(result['supply_scope']).to eq('circuit')
+    expect(result.dig('setpoints', 'supply')).to eq(27)
+    expect(result.dig('setpoints', 'supply_calculated')).to be_nil
     html = document(render)
-    expect(html.at_css('.vp-mode').text).to include('<script>bad</script>')
-    expect(html.css('.vp-mode script')).to be_empty
+    expect(html.at_css('.vp-curve-readings').text).to include('Circuit supply', '28 °C', '27 °C')
+    expect(html.at_css('.vp-curve-readings').text).not_to include('45 °C')
+  end
+
+  it 'labels the heat-pump fallback and skips unusable circuit sensors' do
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'isEnabled' => false, 'properties' => { 'value' => { 'value' => 28 } } }
+    expect(transform['supply_scope']).to eq('heat_pump')
+    expect(document(render).at_css('.vp-curve-readings').text).to include('Heat pump supply')
+    sensor = feature('heating.circuits.0.sensors.temperature.supply')
+    sensor['isEnabled'] = true
+    sensor['properties']['status'] = { 'value' => 'disconnected' }
+    expect(transform['supply_scope']).to eq('heat_pump')
+  end
+
+  it 'keeps outlying measurements inside the plot without clamping the reading' do
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['properties']['value']['value'] = 75
+    result = transform
+    expect(result.dig('curve', 'measured', 'y')).to be_between(24, 156)
+    expect(result.dig('curve', 'ticks').last['value']).to be >= 75
+    expect(result.dig('curve', 'points').map { |point| point['supply'] }.max).to eq(50)
+  end
+
+  it 'omits markers for missing or invalid sensors without inventing readings' do
+    feature('heating.secondaryCircuit.sensors.temperature.supply')['isEnabled'] = false
+    expect(transform.dig('curve', 'measured')).to be_nil
+    feature('heating.sensors.temperature.outside')['isEnabled'] = false
+    expect(transform.dig('curve', 'target')).to be_nil
+    expect(document(render).css('.vp-supply-marker, .vp-target-marker')).to be_empty
   end
 
   it 'defaults to English for an unsupported language' do
@@ -161,7 +218,8 @@ RSpec.describe 'Viessmann heat pump' do
     feature('heating.sensors.temperature.outside')['properties']['value']['value'] = '-5.2'
     feature('heating.dhw.sensors.temperature.dhwCylinder')['isEnabled'] = false
     html = document(render)
-    expect(html.at_css('.vp-metrics').text).to include('0°C', '-5.2°C', '—°C')
+    expect(html.at_css('.vp-metrics').text).to include('-5.2°C', '—°C')
+    expect(html.at_css('.vp-curve-readings').text).to include('0 °C')
   end
 
   it 'supports custom sensors, another circuit and multi-URL response wrappers' do
