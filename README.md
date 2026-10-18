@@ -1,6 +1,6 @@
 # Viessmann heat pump for TRMNL X
 
-A read-only heat-pump dashboard with supply, hot-water and outdoor temperatures, target temperatures, a heating on/off badge, a complete capped heating curve with measured/target supply markers, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels and numbers. Dates follow the configured time zone’s regional format.
+A read-only heat-pump dashboard with supply, hot-water and outdoor temperatures, target temperatures, an active-circuit badge, water pressure, a complete capped heating curve with measured/target supply markers, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels and numbers. Dates follow the configured time zone’s regional format.
 
 This project starts from the [official `trmnlp init` scaffold](https://github.com/usetrmnl/trmnlp). All four layouts render the same shared dashboard. There is no layout generator, custom preview server, JavaScript build step or deployment wrapper.
 
@@ -141,7 +141,15 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 | API feature: current thermal output | Auto | Prefer whole-device heat output, otherwise compressor 0; scope is shown. |
 | API feature: heat delivered today | Auto | Prefer device heat total, otherwise heating + DHW heat counters. |
 
-The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset. The top-right **Heating on/off** badge uses `heating.circuits.N.circulation.pump.properties.status.value`; it indicates circuit circulation, not compressor operation or the selected operating mode. Missing, disabled or unrecognized status shows **Heating unknown**. No separate operating-mode field is displayed.
+The dashboard groups information into three bordered blocks:
+
+- **Heating:** outdoor temperature, heating-water pressure, the capped heating curve, measured/target supply markers and curve parameters.
+- **Hot water:** cylinder temperature and configured target.
+- **Power & energy:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
+
+The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset. The top-right badge shows **Hot water**, **Heating** or **Off** (**Warmwasser**, **Heizung**, **Aus**). Active `heating.dhw.charging.properties.active.value` takes priority. Otherwise the plugin reads `heating.secondaryCircuit.operation.state.properties.currentValue.value`, not `targetValue` or the configured operating mode. `standby`/`off` means off even if circulation continues. When current operation is heating and `heating.valves.fourThreeWay.position` reports `domesticHotWater`, the badge shows hot water. Valve position alone does not prove activity. On devices without current operation, known charging=false plus the selected circuit's circulation status can identify heating/off. Unsupported or incomplete signals show **Status unknown**; cooling/defrost are not silently reported as off.
+
+Pressure comes from `heating.sensors.pressure.supply`, which the [official catalogue](https://api.viessmann-climatesolutions.com/documentation/data-points) describes as water pressure in the supply. It does not use compressor/refrigerant pressure. Supported pressure units are converted to bar; missing, disconnected, disabled, negative or unsupported-unit readings show a dash. Pressure has its own timestamp/age and does not make the temperature-sensor status stale.
 
 ## Electricity consumption and heat output
 

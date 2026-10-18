@@ -58,7 +58,8 @@ def main():
         'transform_warning_present': bool(result.get('warning')),
         'feature_count': feature_count,
         'dashboard_signals': {
-            'heating_state': variables.get('heating', {}).get('state'),
+            'active_circuit': variables.get('activity', {}).get('state'),
+            'pressure_bar': variables.get('pressure', {}).get('bar'),
             'supply_scope': variables.get('supply_scope'),
             'supply_temperature_c': variables.get('supply_reading', {}).get('value'),
             'supply_target_c': variables.get('setpoints', {}).get('supply'),

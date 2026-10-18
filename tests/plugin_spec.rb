@@ -37,10 +37,14 @@ RSpec.describe 'Viessmann heat pump' do
         html = document(screen)
         expect(html.at_css('.vp')['lang']).to eq(language)
         expect(html.at_css('.vp').to_html).not_to match(/\bAPI\b|calculated|berechnet|berechnung/i)
-        expect(html.at_css('.vp-heating').text).to eq(language == 'de' ? 'Heizung an' : 'Heating on')
+        expect(html.at_css('.vp-activity').text).to eq(language == 'de' ? 'Heizung' : 'Heating')
         expect(html.at_css('.vp').text).not_to match(/\b(?:CEST|CET|MESZ|MEZ|UTC|GMT)\b/)
         expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '32,4' : '32.4')
-        expect(html.css('.vp-metrics .vp-metric').size).to eq(2)
+        expect(html.css('.vp-blocks > section').size).to eq(3)
+        expect(html.at_css('.vp-water-block .vp-water').text).to include(language == 'de' ? '48,2' : '48.2')
+        expect(html.at_css('.vp-heating-block .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
+        expect(html.at_css('.vp-heating-block svg')).not_to be_nil
+        expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-supply-marker')).not_to be_nil
         expect(html.at_css('.vp-target-marker')).not_to be_nil
         expect(html.css('.vp-mode')).to be_empty
@@ -58,25 +62,85 @@ RSpec.describe 'Viessmann heat pump' do
     expect(html.at_css('.vp-metrics').text).to include('—')
   end
 
-  it 'does not infer heating activity from the selected operating mode' do
-    data['data'].reject! { |item| item['feature'].end_with?('.circulation.pump') }
-    expect(transform.dig('heating', 'state')).to eq('unknown')
-    expect(document(render).at_css('.vp-heating').text).to eq('Heating unknown')
+  it 'does not infer activity from the selected operating mode or an isolated pump status' do
+    data['data'].reject! { |item| %w[heating.secondaryCircuit.operation.state heating.dhw.charging].include?(item['feature']) }
+    expect(transform.dig('activity', 'state')).to eq('unknown')
+    expect(document(render).at_css('.vp-activity').text).to eq('Status unknown')
   end
 
-  it 'shows heating off independently of a heating-enabled mode' do
+  it 'shows off when the current operating state is standby even with circulation on' do
+    feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'standby'
+    expect(transform.dig('activity', 'state')).to eq('off')
+    expect(document(render).at_css('.vp-activity').text).to eq('Off')
+  end
+
+  it 'gives active hot-water charging priority over heating circulation' do
+    feature('heating.dhw.charging')['properties']['active']['value'] = true
+    expect(transform.dig('activity', 'state')).to eq('dhw')
+    expect(document(render('full', 'de')).at_css('.vp-activity').text).to eq('Warmwasser')
+  end
+
+  %w[dhw domesticHotWater heating standby off cooling defrost].each do |state|
+    it "uses current state #{state} and ignores the future target state" do
+      operation = feature('heating.secondaryCircuit.operation.state')['properties']
+      operation['currentValue']['value'] = state
+      operation['targetValue'] = { 'value' => 'domesticHotWater' }
+      expected = { 'dhw' => 'dhw', 'domesticHotWater' => 'dhw', 'heating' => 'heating', 'standby' => 'off', 'off' => 'off' }.fetch(state, 'unknown')
+      expect(transform.dig('activity', 'state')).to eq(expected)
+    end
+  end
+
+  it 'uses valve routing only while operation is active' do
+    data['data'] << { 'feature' => 'heating.valves.fourThreeWay.position', 'properties' => { 'value' => { 'value' => 'domesticHotWater' } } }
+    expect(transform.dig('activity', 'state')).to eq('dhw')
+    feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'standby'
+    expect(transform.dig('activity', 'state')).to eq('off')
+    feature('heating.secondaryCircuit.operation.state')['isEnabled'] = false
+    feature('heating.circuits.0.circulation.pump')['isEnabled'] = false
+    expect(transform.dig('activity', 'state')).to eq('unknown')
+  end
+
+  it 'can use charging plus pump signals when current operation is unsupported' do
+    data['data'].reject! { |item| item['feature'] == 'heating.secondaryCircuit.operation.state' }
+    expect(transform.dig('activity', 'state')).to eq('heating')
     feature('heating.circuits.0.circulation.pump')['properties']['status']['value'] = 'off'
-    expect(transform.dig('heating', 'state')).to eq('off')
-    expect(document(render).at_css('.vp-heating').text).to eq('Heating off')
+    expect(transform.dig('activity', 'state')).to eq('off')
+    feature('heating.dhw.charging')['isEnabled'] = false
+    expect(transform.dig('activity', 'state')).to eq('unknown')
   end
 
-  it 'does not trust disabled or erroneous pump status' do
-    pump = feature('heating.circuits.0.circulation.pump')
-    pump['isEnabled'] = false
-    expect(transform.dig('heating', 'state')).to eq('unknown')
-    pump['isEnabled'] = true
-    pump['properties']['status']['value'] = '<script>on</script>'
-    expect(transform.dig('heating', 'state')).to eq('unknown')
+  it 'does not interpret disabled, error, or string-valued charging as active' do
+    feature('heating.dhw.charging')['properties']['active']['value'] = 'true'
+    expect(transform.dig('activity', 'state')).to eq('heating')
+    feature('heating.dhw.charging')['properties']['active']['value'] = true
+    feature('heating.dhw.charging')['isEnabled'] = false
+    expect(transform.dig('activity', 'state')).to eq('heating')
+    feature('heating.dhw.charging')['isEnabled'] = true
+    feature('heating.dhw.charging')['properties']['status'] = { 'value' => 'error' }
+    expect(transform.dig('activity', 'state')).to eq('heating')
+  end
+
+  it 'uses the water-pressure sensor, independently of compressor refrigerant pressure' do
+    data['data'] << { 'feature' => 'heating.compressors.0.sensors.pressure.inlet', 'properties' => { 'value' => { 'value' => 20, 'unit' => 'bar' } } }
+    expect(transform.dig('pressure', 'bar')).to eq(1.8)
+    expect(document(render('full', 'de')).at_css('.vp-pressure').text).to include('Druck', '1,8bar')
+  end
+
+  [['bar', 0, 0], ['kPa', 180, 1.8], ['pascal', 180_000, 1.8], ['millibar', 1800, 1.8], ['celsius', 30, nil], [nil, 1.8, nil], ['bar', -1, nil]].each do |unit, value, expected|
+    it "handles pressure #{value} #{unit.inspect} without inventing units" do
+      feature('heating.sensors.pressure.supply')['properties']['value'] = { 'value' => value, 'unit' => unit }
+      expect(transform.dig('pressure', 'bar')).to eq(expected)
+    end
+  end
+
+  it 'retains pressure freshness separately and rejects unavailable sensors' do
+    sensor = feature('heating.sensors.pressure.supply')
+    sensor['timestamp'] = '2026-10-18T10:00:00Z'
+    expect(transform.dig('pressure', 'stale')).to be(true)
+    expect(transform.dig('freshness', 'stale')).to be(false)
+    sensor['properties']['status']['value'] = 'disconnected'
+    expect(transform.dig('pressure', 'bar')).to be_nil
+    expect(document(render).at_css('.vp-pressure').text).to include('—bar')
   end
 
   it 'prefers circuit supply and the live circuit target over heat-pump supply and the model' do
@@ -218,7 +282,8 @@ RSpec.describe 'Viessmann heat pump' do
     feature('heating.sensors.temperature.outside')['properties']['value']['value'] = '-5.2'
     feature('heating.dhw.sensors.temperature.dhwCylinder')['isEnabled'] = false
     html = document(render)
-    expect(html.at_css('.vp-metrics').text).to include('-5.2°C', '—°C')
+    expect(html.at_css('.vp-metrics').text).to include('-5.2°C')
+    expect(html.at_css('.vp-water').text).to include('—°C')
     expect(html.at_css('.vp-curve-readings').text).to include('0 °C')
   end
 

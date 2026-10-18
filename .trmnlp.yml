@@ -36,6 +36,27 @@ variables:
           value: 2
       isEnabled: true
       timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.secondaryCircuit.operation.state
+      properties:
+        currentValue:
+          value: heating
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.dhw.charging
+      properties:
+        active:
+          value: false
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.sensors.pressure.supply
+      properties:
+        value:
+          value: 1.8
+          unit: bar
+        status:
+          value: connected
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
     - feature: heating.circuits.0.circulation.pump
       properties:
         status:

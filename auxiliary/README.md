@@ -111,3 +111,5 @@ Timestamps use the configured `time_zone`, defaulting to `Europe/Berlin`. Date p
 - [Viessmann developer portal](https://developer.viessmann-climatesolutions.com/start.html)
 
 Endpoint implementation references: [PyViCare OAuth manager](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareAbstractOAuthManager.py) and [feature service](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareService.py).
+
+The live refresh check also reports only the active circuit, supply sensor scope/value/target and heating-water pressure, to verify the selected dashboard signals without dumping the API payload or settings.

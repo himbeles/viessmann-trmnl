@@ -46,6 +46,10 @@ function run(input) {
   const active = features.find(item => item?.feature === `${prefix}.operating.programs.active` && item.isEnabled !== false);
   const program = text(active?.properties?.value?.value, null, 80);
   fields.set(`${prefix}.circulation.pump`, ['status']);
+  fields.set('heating.dhw.charging', ['active', 'status']);
+  fields.set('heating.secondaryCircuit.operation.state', ['currentValue', 'status']);
+  fields.set('heating.valves.fourThreeWay.position', ['value', 'status']);
+  fields.set('heating.sensors.pressure.supply', ['value', 'status']);
   fields.set(`${prefix}.operating.programs.active`, ['value']);
   fields.set(`${prefix}.operating.programs.normal`, ['temperature']);
   fields.set(`${prefix}.operating.programs.normalHeating`, ['temperature']);
@@ -58,11 +62,15 @@ function run(input) {
   for (const [name, keys] of fields) {
     const feature = features.find(item => item && item.feature === name);
     if (!feature) continue;
-    const mode = name.endsWith('.operating.modes.active') || name.endsWith('.operating.programs.active');
+    const mode = name.endsWith('.operating.modes.active') || name.endsWith('.operating.programs.active') || name === 'heating.valves.fourThreeWay.position';
     const properties = {};
     for (const key of keys) {
       const raw = feature.properties?.[key]?.value;
-      properties[key] = { value: key === 'status' || mode ? text(raw, null, 128) : numeric(raw) };
+      properties[key] = { value: key === 'active' ? (typeof raw === 'boolean' ? raw : null)
+        : key === 'status' || key === 'currentValue' || mode ? text(raw, null, 128) : numeric(raw) };
+      if (name === 'heating.sensors.pressure.supply' && key === 'value') {
+        properties[key].unit = text(feature.properties?.[key]?.unit, null, 32);
+      }
     }
     const reading = { feature: name, isEnabled: feature.isEnabled !== false, properties };
     const timestamp = text(feature.timestamp, null, 64);
@@ -85,6 +93,17 @@ function run(input) {
   result.supply_reading = { feature: selectedSupply, value: value(selectedSupply) };
   result.supply_scope = selectedSupply === circuitSupply ? 'circuit' : selectedSupply === deviceSupply ? 'heat_pump' : 'custom';
   result.heating = { state: pumpStatus === 'on' || pumpStatus === 'off' ? pumpStatus : 'unknown' };
+  const operation = valid('heating.secondaryCircuit.operation.state')?.properties?.currentValue?.value;
+  const charging = valid('heating.dhw.charging')?.properties?.active?.value;
+  const valve = value('heating.valves.fourThreeWay.position');
+  // Current state describes activity; valve position alone may persist while idle.
+  let activity = 'unknown';
+  if (charging === true || ['dhw', 'domesticHotWater'].includes(operation)) activity = 'dhw';
+  else if (['standby', 'off'].includes(operation)) activity = 'off';
+  else if (operation === 'heating') activity = valve === 'domesticHotWater' ? 'dhw' : 'heating';
+  else if (operation == null && pumpStatus === 'on' && charging === false) activity = 'heating';
+  else if (operation == null && pumpStatus === 'off' && charging === false) activity = 'off';
+  result.activity = { state: activity };
   result.setpoints = { room, supply: value(settings.supply_setpoint_feature) ?? value(`${prefix}.temperature`), water: value(settings.water_setpoint_feature) };
 
   // Configuration timestamps describe setting changes, not sensor freshness.
@@ -373,6 +392,19 @@ function run(input) {
   };
   result.energy = readEnergy('power.consumption', settings.current_power_feature, settings.daily_energy_feature);
   result.heat = readEnergy('heat.production', settings.current_heat_feature, settings.daily_heat_feature);
+
+  const pressureFeature = valid('heating.sensors.pressure.supply');
+  const rawPressure = pressureFeature?.properties?.value?.value;
+  const pressureUnit = pressureFeature?.properties?.value?.unit;
+  const barFactors = { bar: 1, pascal: 0.00001, Pa: 0.00001, kilopascal: 0.01, kPa: 0.01,
+    hectopascal: 0.001, hPa: 0.001, millibar: 0.001, mbar: 0.001 };
+  const pressureFactor = barFactors[pressureUnit];
+  const pressureTime = Date.parse(pressureFeature?.timestamp);
+  result.pressure = {
+    bar: rawPressure != null && rawPressure >= 0 && pressureFactor != null ? Math.round(rawPressure * pressureFactor * 100) / 100 : null,
+    stale: Number.isFinite(pressureTime) && now - pressureTime > settings.stale_minutes * 60000,
+    updated: Number.isFinite(pressureTime) ? formatTime(pressureTime) : null
+  };
 
   // E3 curve calculation used by PyViCare, with live circuit limits.
   // https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatCurveCalculation.py
