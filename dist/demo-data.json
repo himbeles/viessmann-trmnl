@@ -1,0 +1,58 @@
+{
+  "demo": true,
+  "data": [
+    {
+      "feature": "heating.secondaryCircuit.sensors.temperature.supply",
+      "properties": {
+        "value": {
+          "value": 32.4
+        }
+      },
+      "isEnabled": true,
+      "timestamp": "2026-10-18T18:00:00Z"
+    },
+    {
+      "feature": "heating.dhw.sensors.temperature.dhwCylinder",
+      "properties": {
+        "value": {
+          "value": 48.2
+        }
+      },
+      "isEnabled": true,
+      "timestamp": "2026-10-18T18:00:00Z"
+    },
+    {
+      "feature": "heating.sensors.temperature.outside",
+      "properties": {
+        "value": {
+          "value": 7.8
+        }
+      },
+      "isEnabled": true,
+      "timestamp": "2026-10-18T18:00:00Z"
+    },
+    {
+      "feature": "heating.circuits.0.heating.curve",
+      "properties": {
+        "slope": {
+          "value": 0.5
+        },
+        "shift": {
+          "value": 2
+        }
+      },
+      "isEnabled": true,
+      "timestamp": "2026-10-18T18:00:00Z"
+    },
+    {
+      "feature": "heating.circuits.0.operating.modes.active",
+      "properties": {
+        "value": {
+          "value": "dhwAndHeating"
+        }
+      },
+      "isEnabled": true,
+      "timestamp": "2026-10-18T18:00:00Z"
+    }
+  ]
+}

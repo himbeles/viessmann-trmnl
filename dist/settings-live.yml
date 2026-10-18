@@ -1,0 +1,52 @@
+name: Viessmann Wärmepumpe · API
+strategy: polling
+refresh_interval: 60
+no_screen_padding: no
+dark_mode: no
+custom_fields:
+  - keyname: installation_id
+    name: API-Installations-ID
+    field_type: string
+  - keyname: gateway_serial
+    name: Gateway-Seriennummer aus der API
+    field_type: string
+  - keyname: device_id
+    name: API-Geräte-ID (mit Geräteliste abgleichen)
+    field_type: string
+    default: "1"
+  - keyname: circuit
+    name: Heizkreis (0 = erster Heizkreis)
+    field_type: string
+    default: "0"
+    optional: true
+  - keyname: supply_feature
+    name: "API-Feature: Vorlauftemperatur"
+    field_type: string
+    default: heating.secondaryCircuit.sensors.temperature.supply
+    optional: true
+  - keyname: water_feature
+    name: "API-Feature: Warmwasserspeicher"
+    field_type: string
+    default: heating.dhw.sensors.temperature.dhwCylinder
+    optional: true
+  - keyname: outside_feature
+    name: "API-Feature: Außentemperatur"
+    field_type: string
+    default: heating.sensors.temperature.outside
+    optional: true
+  - keyname: stale_minutes
+    name: Veraltet nach Minuten
+    field_type: string
+    default: "120"
+    optional: true
+polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{
+  installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode
+  }}/devices/{{ device_id | url_encode }}/features/
+polling_headers: "Authorization: Bearer {{ oauth_access_token }}"
+polling_verb: GET
+oauth_enabled: "true"
+oauth_authorize_url: https://iam.viessmann-climatesolutions.com/idp/v3/authorize
+oauth_token_url: https://iam.viessmann-climatesolutions.com/idp/v3/token
+oauth_scopes: IoT User offline_access
+oauth_pkce_enabled: "true"
+oauth_token_request_auth_method: body
