@@ -32,6 +32,10 @@ RSpec.describe 'Viessmann heat pump' do
   %w[en de].each do |language|
     %w[full half_horizontal half_vertical quadrant].each do |view|
       it "renders #{view} in #{language} through the official Liquid runtime" do
+        data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 8)
+        data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 4.34)
+        data['data'] << reading('heating.heat.production.summary.heating', 'currentDay', 35)
+        data['data'] << reading('heating.heat.production.summary.dhw', 'currentDay', 13.6)
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         html = document(screen)
@@ -47,6 +51,18 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
         expect(html.at_css('.vp-supply-marker')).not_to be_nil
         expect(html.at_css('.vp-target-marker')).not_to be_nil
+        expect(html.css('.vp-mode, .vp-points, .vp-energy-asof')).to be_empty
+        expect(html.css('path[stroke-dasharray="7 4"]')).to be_empty
+        expect(html.css('.vp-params > div').size).to eq(2)
+        expect(html.at_css('.vp-heating-block > .vp-metrics .vp-room-target').text).to include('22')
+        expect(html.css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-heating-block vp-block-active'])
+        expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')
+        expect(html.at_css('.vp-heating-block .vp-use-energy').text).to include('8 kWh', '35 kWh')
+        expect(html.at_css('.vp-return-marker')).not_to be_nil
+        expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '27,1' : '27.1')
+        expect(html.at_css('.vp-footer').text).to include('18.10.2026, 20:00')
+        expect(html.at_css('.vp-footer').text).not_to match(/TRMNL|Read only|Nur Anzeige/)
+        expect(html.at_css('.vp-blocks').text).not_to match(/18[.]10[.]2026/)
         expect(html.css('.vp-mode')).to be_empty
         expect(html.at_css('.vp-energy').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '12.34'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
         expect(html.at_css('.vp')['class'].include?('vp-compact')).to eq(view != 'full')
@@ -181,6 +197,61 @@ RSpec.describe 'Viessmann heat pump' do
     feature('heating.sensors.temperature.outside')['isEnabled'] = false
     expect(transform.dig('curve', 'target')).to be_nil
     expect(document(render).css('.vp-supply-marker, .vp-target-marker')).to be_empty
+  end
+
+  it 'shows the latest displayed reading while preserving the oldest sensor freshness' do
+    feature('heating.sensors.temperature.outside')['timestamp'] = '2026-10-18T10:00:00Z'
+    feature('heating.compressors.0.power.consumption.current')['timestamp'] = '2026-10-18T18:05:00Z'
+    feature('heating.circuits.0.heating.curve')['timestamp'] = '2026-10-18T18:09:00Z'
+    result = transform
+    expect(result.dig('freshness', 'latest_reading')).to eq('18.10.2026, 20:05')
+    expect(result.dig('freshness', 'oldest_sensor')).to eq('18.10.2026, 12:00')
+    expect(result.dig('freshness', 'stale')).to be(true)
+    html = document(render)
+    expect(html.at_css('.vp-footer').text.strip).to eq('Updated: 18.10.2026, 20:05')
+    expect(html.at_css('.vp-blocks').text).not_to include('20:05', '12:00')
+  end
+
+  it 'includes return and pressure timestamps only for usable displayed readings' do
+    feature('heating.sensors.temperature.return')['timestamp'] = '2026-10-18T18:03:00Z'
+    feature('heating.sensors.pressure.supply')['timestamp'] = '2026-10-18T18:06:00Z'
+    expect(transform.dig('freshness', 'latest_reading')).to include('20:06')
+    feature('heating.sensors.pressure.supply')['isEnabled'] = false
+    expect(transform.dig('freshness', 'latest_reading')).to include('20:03')
+  end
+
+  it 'prefers circuit return and rejects disconnected fallback readings' do
+    data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.return', 'properties' => { 'value' => { 'value' => 24.5 } } }
+    expect(transform.fetch('return_reading')).to include('value' => 24.5, 'scope' => 'circuit')
+    feature('heating.circuits.0.sensors.temperature.return')['isEnabled'] = false
+    feature('heating.sensors.temperature.return')['properties']['status']['value'] = 'disconnected'
+    expect(transform.dig('return_reading', 'value')).to be_nil
+    expect(document(render).css('.vp-return-marker')).to be_empty
+  end
+
+  it 'reads daily heating and water separately alongside whole-device totals' do
+    data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 8000, 'Wh')
+    data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 0)
+    result = transform
+    expect(result.dig('energy', 'today_kwh')).to eq(12.34)
+    expect(result.dig('energy', 'by_use', 'heating', 'today_kwh')).to eq(8)
+    expect(result.dig('energy', 'by_use', 'dhw', 'today_kwh')).to eq(0)
+    expect(result.dig('heat', 'by_use')).to eq({})
+    expect(document(render).at_css('.vp-water-block .vp-use-energy').text).to include('0 kWh', '— kWh')
+  end
+
+  it 'does not substitute yesterday use counters or a whole-device total for individual uses' do
+    data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 8, timestamp: '2026-10-17T18:00:00Z')
+    expect(transform.dig('energy', 'by_use')).to eq({})
+    expect(document(render).at_css('.vp-heating-block .vp-use-energy').text).to include('— kWh')
+  end
+
+  it 'moves the thick border to hot water and removes it when off' do
+    feature('heating.dhw.charging')['properties']['active']['value'] = true
+    expect(document(render).css('.vp-block-active').map { |block| block['class'] }).to eq(['vp-block vp-water-block vp-block-active'])
+    feature('heating.dhw.charging')['properties']['active']['value'] = false
+    feature('heating.secondaryCircuit.operation.state')['properties']['currentValue']['value'] = 'standby'
+    expect(document(render).css('.vp-block-active')).to be_empty
   end
 
   it 'defaults to English for an unsupported language' do
@@ -484,7 +555,8 @@ RSpec.describe 'Viessmann heat pump' do
         note = heat_tile.at_css('.vp-energy-note').text.gsub(/\s+/, ' ').strip
         expect(note).to include(language == 'de' ? 'Warmwasser: Daten veraltet' : 'Hot water: Stale data')
         expect(note).not_to include(language == 'de' ? 'Heizung: Daten veraltet' : 'Heating: Stale data')
-        expect(heat_tile.at_css('.vp-energy-asof').text).to include('20:00', '12:00')
+        expect(heat_tile.css('.vp-energy-asof')).to be_empty
+        expect(document(screen).at_css('.vp-footer').text).to include('20:00')
         expect(heat_tile.at_css('.vp-energy-value').text).to include('35')
       end
     end

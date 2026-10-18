@@ -16,6 +16,14 @@ variables:
           value: 32.4
       isEnabled: true
       timestamp: "2026-10-18T18:00:00Z"
+    - feature: heating.sensors.temperature.return
+      properties:
+        value:
+          value: 27.1
+        status:
+          value: connected
+      isEnabled: true
+      timestamp: "2026-10-18T18:00:00Z"
     - feature: heating.dhw.sensors.temperature.dhwCylinder
       properties:
         value:

@@ -50,6 +50,11 @@ function run(input) {
   fields.set('heating.secondaryCircuit.operation.state', ['currentValue', 'status']);
   fields.set('heating.valves.fourThreeWay.position', ['value', 'status']);
   fields.set('heating.sensors.pressure.supply', ['value', 'status']);
+  const circuitReturn = `${prefix}.sensors.temperature.return`;
+  const selectedReturn = features.some(item => item?.feature === circuitReturn && item.isEnabled !== false
+    && !['error', 'disconnected', 'unavailable'].includes(item.properties?.status?.value)
+    && numeric(item.properties?.value?.value) != null) ? circuitReturn : 'heating.sensors.temperature.return';
+  fields.set(selectedReturn, ['value', 'status']);
   fields.set(`${prefix}.operating.programs.active`, ['value']);
   fields.set(`${prefix}.operating.programs.normal`, ['temperature']);
   fields.set(`${prefix}.operating.programs.normalHeating`, ['temperature']);
@@ -90,6 +95,7 @@ function run(input) {
   const value = name => valid(name)?.properties?.value?.value ?? null;
   const room = program && program !== 'standby' ? valid(`${prefix}.operating.programs.${program}`)?.properties?.temperature?.value ?? null : null;
   const pumpStatus = valid(`${prefix}.circulation.pump`)?.properties?.status?.value;
+  result.return_reading = { value: value(selectedReturn), scope: selectedReturn === circuitReturn ? 'circuit' : 'heat_pump' };
   result.supply_reading = { feature: selectedSupply, value: value(selectedSupply) };
   result.supply_scope = selectedSupply === circuitSupply ? 'circuit' : selectedSupply === deviceSupply ? 'heat_pump' : 'custom';
   result.heating = { state: pumpStatus === 'on' || pumpStatus === 'off' ? pumpStatus : 'unknown' };
@@ -282,6 +288,12 @@ function run(input) {
     stale: oldest !== null && now > 0 && now - oldest > settings.stale_minutes * 60000
   };
 
+  const displayTimes = [...knownTimes];
+  const rememberTime = timestamp => {
+    if (Number.isFinite(timestamp)) displayTimes.push(timestamp);
+  };
+  if (result.return_reading.value != null) rememberTime(Date.parse(valid(selectedReturn)?.timestamp));
+
   // Electrical input and thermal output are separate quantities, never inferred from COP.
   const convert = (property, quantity) => {
     const amount = numeric(property?.value);
@@ -314,6 +326,7 @@ function run(input) {
       const amount = convert(item?.properties?.value, 'power');
       if (amount == null) continue;
       const timestamp = Date.parse(item.timestamp);
+      rememberTime(timestamp);
       metrics.power_kw = amount;
       metrics.power_scope = name.includes('.compressors.') ? 'compressor' : name.includes('.heatingRod.') ? 'heater' : 'device';
       metrics.power_updated = formatTime(Number.isFinite(timestamp) ? timestamp : null);
@@ -346,6 +359,16 @@ function run(input) {
       }
       return null;
     };
+    // Read both uses even when a separate whole-device total is available.
+    metrics.by_use = {};
+    for (const scope of ['heating', 'dhw']) {
+      const reading = firstDay([`heating.${base}.summary.${scope}`, `heating.${base}.${scope}`]);
+      if (reading) {
+        rememberTime(reading.timestamp);
+        metrics.by_use[scope] = { today_kwh: Math.round(reading.amount * 1000) / 1000,
+          stale: now - reading.timestamp > settings.stale_minutes * 60000 };
+      }
+    }
     let daily;
     let dailyScope = 'device';
     if (dailyFeature) {
@@ -374,6 +397,8 @@ function run(input) {
       }
     }
     if (daily) {
+      rememberTime(daily.timestamp);
+      for (const component of daily.components || []) rememberTime(component.timestamp);
       metrics.today_kwh = Math.round(daily.amount * 1000) / 1000;
       metrics.today_scope = dailyScope;
       metrics.today_updated = formatTime(daily.timestamp);
@@ -405,6 +430,9 @@ function run(input) {
     stale: Number.isFinite(pressureTime) && now - pressureTime > settings.stale_minutes * 60000,
     updated: Number.isFinite(pressureTime) ? formatTime(pressureTime) : null
   };
+
+  if (result.pressure.bar != null) rememberTime(pressureTime);
+  result.freshness.latest_reading = displayTimes.length ? formatTime(Math.max(...displayTimes)) : null;
 
   // E3 curve calculation used by PyViCare, with live circuit limits.
   // https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatCurveCalculation.py
@@ -455,7 +483,8 @@ function run(input) {
     const outdoor = value(settings.outside_feature);
     const measured = value(settings.supply_feature);
     const target = result.setpoints.supply;
-    const readings = [measured, target].filter(number => number != null);
+    const returnTemperature = result.return_reading.value;
+    const readings = [measured, target, returnTemperature].filter(number => number != null);
     const minX = Math.min(points[0].outdoor, outdoor ?? points[0].outdoor);
     const maxX = Math.max(points[points.length - 1].outdoor, outdoor ?? points[points.length - 1].outdoor);
     const minY = Math.floor((Math.min(...points.map(point => point.supply), ...readings) - 2) / 5) * 5;
@@ -472,7 +501,7 @@ function run(input) {
       y: round(156 - (temperature - minY) / (maxY - minY) * 132)
     };
     result.curve = {
-      measured: marker(measured), target: marker(target),
+      measured: marker(measured), target: marker(target), return: marker(returnTemperature),
       reference, room_setpoint: curveRoom, max_supply: !reference && limitsValid ? maxSupply : null, max_from_api: apiMax != null,
       cap_y: !reference && maxSupply != null && limitsValid ? round(156 - (maxSupply - minY) / (maxY - minY) * 132) : null,
       invalid_reference: Boolean(settings.curve_points) && !reference,
