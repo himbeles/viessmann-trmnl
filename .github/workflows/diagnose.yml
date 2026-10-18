@@ -1,0 +1,18 @@
+name: Diagnose TRMNL polling
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm --prefix auxiliary ci
+      - name: Inspect saved configuration without displaying credentials
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+        run: node auxiliary/diagnose.mjs
