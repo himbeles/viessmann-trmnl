@@ -12,6 +12,11 @@ custom_fields:
       - Deutsch: de
     default: en
     optional: true
+  - keyname: time_zone
+    name: Display time zone
+    field_type: time_zone
+    default: Europe/Berlin
+    optional: true
   - keyname: installation_id
     name: API installation ID
     field_type: string
@@ -47,6 +52,32 @@ custom_fields:
     field_type: string
     default: "120"
     optional: true
+  - keyname: supply_setpoint_feature
+    name: "API feature: supply setpoint (optional)"
+    field_type: string
+    optional: true
+    description: Use the feature containing the actual supply target. Leave blank if
+      unavailable; no target is invented.
+  - keyname: water_setpoint_feature
+    name: "API feature: configured hot-water target"
+    field_type: string
+    default: heating.dhw.temperature.main
+    optional: true
+  - keyname: curve_points
+    name: Heating curve reference points (optional JSON)
+    field_type: text
+    optional: true
+    description: Optional reference pairs to override the calculated E3 curve. Leave
+      blank for dynamic calculation from API slope, offset, room target and
+      limits.
+  - keyname: max_supply_temperature
+    name: Maximum supply temperature (fallback, °C)
+    field_type: number
+    optional: true
+    min: 0
+    max: 100
+    description: Only used when the API omits the circuit maximum. Enter the current
+      device setting (e.g. 50); API values take precedence.
 polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{
   installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode
   }}/devices/{{ device_id | url_encode }}/features/

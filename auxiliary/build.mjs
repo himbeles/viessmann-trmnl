@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { Liquid } from 'liquidjs';
+import vm from 'node:vm';
 
 export const root = new URL('../', import.meta.url);
 export const layouts = ['full', 'half_horizontal', 'half_vertical', 'quadrant'];
@@ -12,7 +13,11 @@ export const sample = {
     ['heating.dhw.sensors.temperature.dhwCylinder', { value: { value: 48.2 } }],
     ['heating.sensors.temperature.outside', { value: { value: 7.8 } }],
     ['heating.circuits.0.heating.curve', { slope: { value: 0.5 }, shift: { value: 2 } }],
-    ['heating.circuits.0.operating.modes.active', { value: { value: 'dhwAndHeating' } }]
+    ['heating.circuits.0.operating.modes.active', { value: { value: 'dhwAndHeating' } }],
+    ['heating.circuits.0.operating.programs.active', { value: { value: 'normal' } }],
+    ['heating.circuits.0.operating.programs.normal', { temperature: { value: 22 } }],
+    ['heating.circuits.0.temperature.levels', { min: { value: 20 }, max: { value: 50 } }],
+    ['heating.dhw.temperature.main', { value: { value: 50 } }]
   ].map(([feature, properties]) => ({ feature, properties, isEnabled: true, timestamp: '2026-10-18T18:00:00Z' }))
 };
 export const context = {
@@ -20,7 +25,9 @@ export const context = {
 };
 export const engine = new Liquid({ strictFilters: true });
 export const template = await readFile(new URL('full.liquid', root), 'utf8');
-export const render = (payload = {}, extra = {}, source = template) => engine.parseAndRender(source, { ...context, ...payload, ...extra });
+const transformCode = await readFile(new URL('transform.js', root), 'utf8');
+export const transform = input => JSON.parse(JSON.stringify(vm.runInNewContext(`${transformCode}\nrun(payload)`, { payload: input }, { timeout: 1000 })));
+export const render = (payload = {}, extra = {}, source = template) => engine.parseAndRender(source, transform({ ...context, ...payload, ...extra }));
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   for (const [name, classes] of [['half_horizontal', 'vp-compact'], ['half_vertical', 'vp-compact vp-small'], ['quadrant', 'vp-compact vp-small']]) {
@@ -44,6 +51,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 <label>Data <select id="state"><option value="demo">Sample data</option><option value="empty">Not connected</option></select></label>
 <div class="scroll"><div id="screen" class="screen">${views['en-demo']}</div></div>
 ${Object.entries(views).map(([key, html]) => `<template id="${key}">${html}</template>`).join('\n')}
-<footer>The chart is schematic and does not calculate Viessmann setpoints. This is a read-only display.</footer></main>
+<footer>The chart is calculated from live curve settings using the E3 model and available supply limits. Compare calculated values with ViCare. This is a read-only display.</footer></main>
 <script>for(const id of ['language','state'])document.getElementById(id).addEventListener('change',()=>{const key=document.getElementById('language').value+'-'+document.getElementById('state').value;document.getElementById('screen').replaceChildren(document.getElementById(key).content.cloneNode(true))})</script></html>\n`);
 }

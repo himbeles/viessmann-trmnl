@@ -1,6 +1,6 @@
 # Viessmann heat pump for TRMNL X
 
-A read-only TRMNL private plugin showing supply, hot-water and outdoor temperatures, heating-curve parameters and the configured operating mode. The full-screen layout includes a schematic heating curve; compact layouts show temperatures.
+A read-only TRMNL private plugin showing supply, hot-water and outdoor temperatures, heating-curve parameters and the configured operating mode. The full-screen layout plots a nonlinear E3 heating curve with six labelled outdoor-temperature points and the configured supply-temperature limit. Compact layouts show temperatures, targets and a prominent operating mode.
 
 The display defaults to **English**. Choose **Deutsch** in **Display language** for German labels, status messages, number formatting and timestamps.
 
@@ -55,6 +55,7 @@ The plugin uses **Polling**, **GET**, and `Authorization: Bearer {{ oauth_access
 | Field | Default | Purpose |
 |---|---|---|
 | Display language | English (`en`) | Choose English or German (`de`). |
+| Display time zone | `Europe/Berlin` | IANA time zone; daylight-saving time is handled automatically. |
 | API installation ID | Required | Installation identifier from the API inventory. |
 | API gateway serial number | Required | Gateway identifier from the API inventory. |
 | API device ID | `0` | Confirm against the API device list; `0` is the verified heating device for the supplied Vitocal inventory. |
@@ -62,7 +63,11 @@ The plugin uses **Polling**, **GET**, and `Authorization: Bearer {{ oauth_access
 | API feature: supply temperature | `heating.secondaryCircuit.sensors.temperature.supply` | Feature used for the supply reading. |
 | API feature: hot-water cylinder temperature | `heating.dhw.sensors.temperature.dhwCylinder` | Feature used for the cylinder reading. |
 | API feature: outdoor temperature | `heating.sensors.temperature.outside` | Feature used for the outdoor reading. |
-| Mark readings stale after (minutes) | `120` | Age threshold based on the oldest displayed API timestamp. |
+| Mark readings stale after (minutes) | `120` | Age threshold for the oldest valid temperature sensor timestamp; configuration timestamps are excluded. |
+| API feature: supply setpoint | Blank | Optional direct supply-target feature. If unavailable, the target is calculated and labelled accordingly. |
+| API feature: configured hot-water target | `heating.dhw.temperature.main` | Configured main hot-water target; not necessarily the active scheduled target. |
+| Maximum supply temperature (fallback, °C) | Blank | Used only when the API does not expose the circuit maximum; API values take precedence. |
+| Heating curve reference points | Blank | Optional JSON reference pairs that override the dynamic model. Leave blank for live calculation. |
 
 The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset and `heating.circuits.N.operating.modes.active` for operating mode. An operating mode is not a compressor-running indicator.
 
@@ -73,9 +78,30 @@ The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset 
 - **One reading is missing:** verify its feature name, `isEnabled` state and API availability. Missing or failed readings display a dash; they are not treated as zero.
 - **HTTP 401 / 403 / 429:** reconnect for authentication errors, check permissions for access errors, or wait for the API quota to reset.
 - **Redirect error:** compare the registered URI with the exact callback URL shown by your plugin.
-- **Stale or unknown timestamp:** check the displayed UTC timestamp. An offline E-Ink screen retains its last image and cannot update its stale badge until another screen is rendered.
+- **Stale or unknown timestamp:** check the sensor timestamp in your configured time zone. An offline E-Ink screen retains its last image and cannot update its stale badge until another screen is rendered.
 
-The heating curve is explicitly **schematic**, not a calculation of Viessmann setpoints. It does not simulate model-specific control or supply-temperature limits. The plugin never changes heat-pump settings.
+## Curve, targets and timestamps
+
+The graph is recalculated on each refresh from the API's slope, offset, selected room setpoint, and circuit supply-temperature limits. It uses the nonlinear E3 calculation implemented by PyViCare for E3 heat pumps (matching the supplied Vitocal 250-A device roles), rather than the previous linear schema. All six reference temperatures are shown: **−30, −20, −10, 0, 10 and 20 °C**. Intermediate points draw the curve smoothly; minimum/maximum limits produce plateaus instead of clipping the chart. A dashed line identifies the maximum.
+
+The API features used here expose parameters, not a directly sampled ViCare curve. Values are therefore labelled **calculated** and should be compared with the app; firmware-specific control and filtered outdoor temperatures can cause differences. Room target comes from the active heating program, with a normal-program fallback for plotting. The curve is unavailable if no room target is supplied. There is no assumed 20 °C room target.
+
+The circuit maximum is read from `heating.circuits.N.temperature.levels.properties.max.value`, with its minimum applied when available. If the maximum is unavailable, the chart says **Limit unavailable**. You can enter the device's current maximum in the fallback field (the supplied screenshot showed 50 °C); it is labelled as configuration and is overridden when the API provides a maximum. Do not use an API command's allowed input range as the configured maximum.
+
+Heating and hot-water tiles include target values. A configured supply-target feature is preferred; otherwise a model-derived target at the current outdoor reading is explicitly labelled **calculated**. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The full layout also shows the active room target. The plugin never changes heat-pump settings.
+
+**Why “Daten veraltet” appeared:** the previous implementation used the oldest timestamp across sensors, curve settings and mode. An unchanged curve or mode could therefore make the dashboard appear stale. Freshness now uses only valid supply, hot-water and outdoor sensor timestamps. Changing the time zone affects presentation, not age. A sensor's own API timestamp may still describe its last change rather than a new sample; an old timestamp alone does not prove the device is disconnected. Missing sensor timestamps are identified separately.
+
+Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Invalid zones fall back to UTC.
+
+### Updating an existing connected plugin
+
+1. Replace the Serverless code with the latest [`transform.js`](transform.js), keeping **Node** selected.
+2. Replace the four layout tabs with the corresponding `.liquid` files from this repository.
+3. Copy the `custom_fields` section from [`settings.yml`](settings.yml) into the plugin's Form Fields definition; retain existing field values and OAuth settings.
+4. Save, set your time zone, then **Force Refresh**. If the plugin is impaired, reset its status first.
+
+Keep `curve_points` blank for dynamic calculation. The [auxiliary guide](auxiliary/README.md#heating-curve-and-data-age) documents the model and optional reference-point override.
 
 ## Upgrade an existing plugin for large API responses
 

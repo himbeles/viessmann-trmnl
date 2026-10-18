@@ -2,11 +2,11 @@
 {% assign cfg = trmnl.plugin_settings.custom_fields_values %}
 {% assign language = cfg.language | default: 'en' %}
 {% if language == 'de' %}
-{% assign labels = 'Viessmann Wärmepumpe|Zuhause · Heizkreis|DEMO · Beispieldaten|Noch nicht verbunden|Daten veraltet|Zeitstand unbekannt|API-Daten|Heizung|Vorlauftemperatur|Warmwasser|Speichertemperatur|Außen|Außensensor|Heizkurve|Schematische Heizkurve, keine Viessmann-Sollwerte|Außentemperatur °C|Schema · keine Viessmann-Sollwerte|Heizkurve erscheint, sobald<br>Neigung und Niveau vorliegen.|Neigung|Niveau|Betriebsart|Heizen + Warmwasser|Nur Warmwasser|Heizen|Nicht verfügbar|Ältester Wert:|Messzeitpunkt fehlt|Werte unvollständig|Nur Anzeige' | split: '|' %}
+{% assign labels = 'Viessmann Wärmepumpe|Zuhause · Heizkreis|DEMO · Beispieldaten|Noch nicht verbunden|Daten veraltet|Zeitstand unbekannt|API-Daten|Heizung|Vorlauftemperatur|Warmwasser|Speichertemperatur|Außen|Außensensor|Heizkurve|Berechnete Heizkurve mit Vorlaufgrenzen|Außentemperatur °C|Berechnet · API-Einstellungen|Heizkurve benötigt Neigung,<br>Niveau und Raum-Solltemperatur.|Neigung|Niveau|Betriebsart|Heizen + Warmwasser|Nur Warmwasser|Heizen|Nicht verfügbar|Sensor-Zeitstand:|Messzeitpunkt fehlt|Werte unvollständig|Nur Anzeige|Soll|Raum-Solltemperatur|Referenzpunkte|Ungültige Kurvenpunkte: Berechnung angezeigt|Max.|API|Konfiguration|Grenze nicht verfügbar|berechnet' | split: '|' %}
 {% assign decimal = ',' %}{% assign date_format = '%d.%m. %H:%M' %}
 {% else %}
 {% assign language = 'en' %}
-{% assign labels = 'Viessmann heat pump|Home · Heating circuit|DEMO · Sample data|Not connected|Stale data|Timestamp unknown|API data|Heating|Supply temperature|Hot water|Cylinder temperature|Outdoor|Outdoor sensor|Heating curve|Schematic heating curve, not Viessmann setpoints|Outdoor temperature °C|Schematic · not Viessmann setpoints|The heating curve appears when<br>slope and offset are available.|Slope|Offset|Operating mode|Heating + hot water|Hot water only|Heating|Unavailable|Oldest reading:|Reading timestamp missing|Incomplete data|Read only' | split: '|' %}
+{% assign labels = 'Viessmann heat pump|Home · Heating circuit|DEMO · Sample data|Not connected|Stale data|Timestamp unknown|API data|Heating|Supply temperature|Hot water|Cylinder temperature|Outdoor|Outdoor sensor|Heating curve|Calculated heating curve with supply limits|Outdoor temperature °C|Calculated · API settings|The heating curve needs slope,<br>offset and a room setpoint.|Slope|Offset|Operating mode|Heating + hot water|Hot water only|Heating|Unavailable|Sensor timestamp:|Reading timestamp missing|Incomplete data|Read only|Target|Room setpoint|Reference points|Invalid curve points: showing calculation|Max.|API|Configuration|Limit unavailable|calculated' | split: '|' %}
 {% assign decimal = '.' %}{% assign date_format = '%Y-%m-%d %H:%M' %}
 {% endif %}
 {% assign features = data %}
@@ -20,7 +20,7 @@
 {% assign mode_key = prefix | append: '.operating.modes.active' %}
 {% assign supply = nil %}{% assign water = nil %}{% assign outside = nil %}
 {% assign slope = nil %}{% assign shift = nil %}{% assign mode = nil %}
-{% assign oldest = nil %}{% assign missing_time = false %}{% assign found = 0 %}
+{% assign found = 0 %}
 {% for f in features %}
   {% assign used = false %}
   {% if f.isEnabled != false %}
@@ -45,19 +45,8 @@
         {% if mode != nil %}{% assign used = true %}{% endif %}
     {% endcase %}
   {% endif %}
-  {% if used %}
-    {% assign found = found | plus: 1 %}
-    {% if f.timestamp %}
-      {% assign stamp = f.timestamp | date: '%s' | plus: 0 %}
-      {% if oldest == nil or stamp < oldest %}{% assign oldest = stamp %}{% endif %}
-    {% else %}{% assign missing_time = true %}{% endif %}
-  {% endif %}
+  {% if used %}{% assign found = found | plus: 1 %}{% endif %}
 {% endfor %}
-{% assign now = trmnl.system.timestamp_utc | plus: 0 %}
-{% assign age = now | minus: oldest %}
-{% assign stale_after = cfg.stale_minutes | default: 120 | times: 60 %}
-{% assign stale = false %}
-{% if oldest and now > 0 and age > stale_after %}{% assign stale = true %}{% endif %}
 <style>
   .vp{height:100%;width:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:3%;gap:2.4%;font-family:Arial,sans-serif;color:#000;background:#fff}
   .vp *{box-sizing:border-box}.vp-head{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #000;padding-bottom:1.6%;gap:12px}
@@ -67,33 +56,37 @@
   .vp-metric{padding:0 8%;border-right:1px solid #000}.vp-metric:first-child{padding-left:0}.vp-metric:last-child{border:0}
   .vp-label{font-size:14px;font-weight:bold}.vp-value{font-size:clamp(32px,6.2vw,76px);font-weight:700;letter-spacing:-.06em;line-height:1.2;white-space:nowrap}.vp-unit{font-size:.36em;letter-spacing:0;margin-left:4px}.vp-note{font-size:12px;line-height:1.4}
   .vp-bottom{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:5%;flex:1;min-height:0}.vp-chart{display:flex;flex-direction:column;min-height:0}.vp-chart svg{width:100%;flex:1;min-height:0}.vp-params{border-left:1px solid #000;padding-left:12%;display:flex;flex-direction:column;justify-content:space-evenly}.vp-param{font-size:32px;font-weight:bold;line-height:1.25}
+  .vp-mode{font-size:26px;font-weight:750;line-height:1.15;padding:0 0 1%;border-bottom:1px solid #000}.vp-mode-label{font-size:12px;font-weight:400;margin-right:12px}.vp-target{font-size:15px;font-weight:700;margin-top:4px}.vp-points{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;font-size:12px}.vp-point{white-space:nowrap}.vp-compact .vp-mode{font-size:20px}.vp-small .vp-mode{font-size:18px}.vp-small .vp-mode-label{display:none}.vp-small .vp-metric{flex-wrap:wrap}.vp-small .vp-target{width:100%;text-align:right;font-size:11px}
   .vp-footer{display:flex;justify-content:space-between;gap:12px;font-size:11px;border-top:1px solid #000;padding-top:1.2%}.vp-empty{flex:1;display:flex;align-items:center;justify-content:center;border:1px dashed #000;margin-top:8px;text-align:center;font-size:14px;padding:16px}
   .vp-compact .vp-bottom{display:none}.vp-compact .vp-metrics{flex:1;align-items:center}.vp-small .vp-metrics{grid-template-columns:1fr;gap:5px}.vp-small .vp-metric{display:flex;justify-content:space-between;align-items:center;border:0;padding:0}.vp-small .vp-value{font-size:28px}.vp-small .vp-metric .vp-note{display:none}.vp-small .vp-kicker{display:none}.vp-small .vp-footer{font-size:10px}.vp-small .vp-brand{font-size:16px}
 </style>
 <div class="vp vp-compact" lang="{{ language }}">
   <div class="vp-head"><div><div class="vp-kicker">{{ labels[1] }} {{ circuit | escape }}</div><div class="vp-brand">{{ labels[0] }}</div></div>
-    <div class="vp-badge">{% if demo %}{{ labels[2] }}{% elsif found == 0 %}{{ labels[3] }}{% elsif stale %}{{ labels[4] }}{% elsif missing_time or oldest == nil %}{{ labels[5] }}{% else %}{{ labels[6] }}{% endif %}</div>
+    <div class="vp-badge">{% if demo %}{{ labels[2] }}{% elsif found == 0 %}{{ labels[3] }}{% elsif freshness.stale %}{{ labels[4] }}{% elsif freshness.missing_time %}{{ labels[5] }}{% else %}{{ labels[6] }}{% endif %}</div>
   </div>
   <div class="vp-metrics">
-    <div class="vp-metric"><div class="vp-label">{{ labels[7] }}</div><div class="vp-value">{% if supply != nil %}{{ supply | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[8] }}</div></div>
-    <div class="vp-metric"><div class="vp-label">{{ labels[9] }}</div><div class="vp-value">{% if water != nil %}{{ water | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[10] }}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[7] }}</div><div class="vp-value">{% if supply != nil %}{{ supply | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[8] }}</div><div class="vp-target">{{ labels[29] }}{% if setpoints.supply_calculated %} ({{ labels[37] }}){% endif %}: {% if setpoints.supply != nil %}{{ setpoints.supply | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div>
+    <div class="vp-metric"><div class="vp-label">{{ labels[9] }}</div><div class="vp-value">{% if water != nil %}{{ water | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[10] }}</div><div class="vp-target">{{ labels[29] }}: {% if setpoints.water != nil %}{{ setpoints.water | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div>
     <div class="vp-metric"><div class="vp-label">{{ labels[11] }}</div><div class="vp-value">{% if outside != nil %}{{ outside | round: 1 | replace: '.', decimal }}{% else %}—{% endif %}<span class="vp-unit">°C</span></div><div class="vp-note">{{ labels[12] }}</div></div>
   </div>
+  <div class="vp-mode"><span class="vp-mode-label">{{ labels[20] }}</span>{% case mode %}{% when 'dhwAndHeating' %}{{ labels[21] }}{% when 'dhw' %}{{ labels[22] }}{% when 'standby' %}Standby{% when 'heating' %}{{ labels[23] }}{% when nil %}{{ labels[24] }}{% else %}{{ mode | escape }}{% endcase %}</div>
   <div class="vp-bottom">
     <div class="vp-chart"><div class="vp-label">{{ labels[13] }}</div>
-    {% if slope != nil and shift != nil %}
-      <svg viewBox="0 0 460 210" role="img" aria-label="{{ labels[14] }}" preserveAspectRatio="xMidYMid meet">
-        <defs><clipPath id="vp-clip"><rect x="42" y="18" width="398" height="146"/></clipPath></defs>
-        <g fill="none" stroke="#000" stroke-width="1"><path d="M42 18V164H440"/>
-          <path d="M42 128H440M42 91H440M42 55H440M141 18V164M241 18V164M340 18V164" stroke-dasharray="2 5"/>
-        </g>
-        <g fill="#000" font-size="12" font-family="Arial,sans-serif"><text x="6" y="22">60 °C</text><text x="17" y="96">40</text><text x="17" y="168">20</text><text x="32" y="183">−20</text><text x="130" y="183">−10</text><text x="237" y="183">0</text><text x="334" y="183">10</text><text x="424" y="183">20</text><text x="190" y="204">{{ labels[15] }}</text></g>
-        <polyline clip-path="url(#vp-clip)" fill="none" stroke="#000" stroke-width="3" points="{% for i in (0..40) %}{% assign x = i | times: 9.95 | plus: 42 %}{% assign delta = 40 | minus: i %}{% assign temp = delta | times: slope | plus: shift | plus: 20 %}{% assign y = 60 | minus: temp | times: 3.65 | plus: 18 %}{{ x }},{{ y }} {% endfor %}"/>
+    {% if curve.points.size > 1 %}
+      <svg viewBox="0 0 460 210" role="img" aria-label="{% if curve.reference %}{{ labels[31] }}{% else %}{{ labels[14] }}{% endif %}" preserveAspectRatio="xMidYMid meet">
+        <path d="M48 20V156H434" fill="none" stroke="#000"/>
+        {% for tick in curve.ticks %}<path d="M48 {{ tick.y }}H434" fill="none" stroke="#000" stroke-dasharray="2 5"/><text x="40" y="{{ tick.y | plus: 4 }}" text-anchor="end" font-size="12">{{ tick.value | replace: '.', decimal }}</text>{% endfor %}
+        {% for tick in curve.x_ticks %}<text x="{{ tick.x }}" y="178" text-anchor="middle" font-size="12">{{ tick.value | replace: '.', decimal }}</text>{% endfor %}
+        <text x="6" y="14" font-size="12">°C</text><text x="235" y="204" text-anchor="middle" font-size="12">{{ labels[15] }}</text>
+        {% if curve.cap_y != nil %}<path d="M48 {{ curve.cap_y }}H434" stroke="#000" stroke-width="1.5" stroke-dasharray="7 4"/>{% endif %}
+        <polyline fill="none" stroke="#000" stroke-width="3" points="{{ curve.polyline | escape }}"/>
+        {% for point in curve.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.label %}3{% else %}1.5{% endif %}" fill="#000"/>{% endfor %}
       </svg>
-      <div class="vp-note">{{ labels[16] }}</div>
+      <div class="vp-points">{% for point in curve.points %}{% if point.label %}<span class="vp-point">{{ point.outdoor | replace: '.', decimal }}° → <b>{{ point.supply | replace: '.', decimal }}°</b></span>{% endif %}{% endfor %}</div>
+      <div class="vp-note">{% if curve.invalid_reference %}{{ labels[32] }}{% elsif curve.reference %}{{ labels[31] }}{% else %}{{ labels[16] }} · {% if curve.max_supply != nil %}{{ labels[33] }} {{ curve.max_supply | replace: '.', decimal }} °C ({% if curve.max_from_api %}{{ labels[34] }}{% else %}{{ labels[35] }}{% endif %}){% else %}{{ labels[36] }}{% endif %}{% endif %}</div>
     {% else %}<div class="vp-empty">{{ labels[17] }}</div>{% endif %}
     </div>
-    <div class="vp-params"><div><div class="vp-label">{{ labels[18] }}</div><div class="vp-param">{% if slope != nil %}{{ slope | replace: '.', decimal }}{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[19] }}</div><div class="vp-param">{% if shift != nil %}{{ shift | replace: '.', decimal }} K{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[20] }}</div><div class="vp-note">{% case mode %}{% when 'dhwAndHeating' %}{{ labels[21] }}{% when 'dhw' %}{{ labels[22] }}{% when 'standby' %}Standby{% when 'heating' %}{{ labels[23] }}{% when nil %}{{ labels[24] }}{% else %}{{ mode | escape }}{% endcase %}</div></div></div>
+    <div class="vp-params"><div><div class="vp-label">{{ labels[18] }}</div><div class="vp-param">{% if slope != nil %}{{ slope | replace: '.', decimal }}{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[19] }}</div><div class="vp-param">{% if shift != nil %}{{ shift | replace: '.', decimal }} K{% else %}—{% endif %}</div></div><div><div class="vp-label">{{ labels[30] }}</div><div class="vp-param">{% if setpoints.room != nil %}{{ setpoints.room | round: 1 | replace: '.', decimal }} °C{% else %}—{% endif %}</div></div></div>
   </div>
-  <div class="vp-footer"><span>{% if oldest %}{{ labels[25] }} {{ oldest | date: date_format }} UTC{% else %}{{ labels[26] }}{% endif %}</span><span>{% if found < 5 %}{{ labels[27] }}{% else %}{{ labels[28] }}{% endif %} · TRMNL X</span></div>
+  <div class="vp-footer"><span>{% if freshness.oldest_sensor %}{{ labels[25] }} {{ freshness.oldest_sensor | escape }}{% else %}{{ labels[26] }}{% endif %}</span><span>{% if found < 5 %}{{ labels[27] }}{% else %}{{ labels[28] }}{% endif %} · TRMNL X</span></div>
 </div>

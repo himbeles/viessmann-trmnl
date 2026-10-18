@@ -55,7 +55,7 @@ Verify **Enable PKCE? → Yes** after saving. A **code challenge required** erro
 
 ## Serverless response reduction
 
-Viessmann's full feature response can exceed TRMNL's 100 KB polling limit. `transform.js` defines the documented `run(input)` entry point for the Node Serverless runtime. It selects the configured temperature features plus the selected circuit's curve and operating mode, then keeps only their required properties, enabled state and timestamps. It also returns only the runtime settings needed by the markup; credentials, commands and previous output are not echoed. No extra network requests are made.
+Viessmann's full feature response can exceed TRMNL's 100 KB polling limit. `transform.js` defines the documented `run(input)` entry point for the Node Serverless runtime. It selects temperature readings, target settings, the selected circuit's curve, operating mode, active heating program and supply-temperature limits, then keeps only their required properties, enabled state and timestamps. It also returns only the runtime settings needed by the markup; credentials, commands and previous output are not echoed. No extra network requests are made.
 
 `settings.yml` enables `serverless_language: node`; the packager includes the script. For an existing connected plugin, follow the [upgrade instructions](../README.md#upgrade-an-existing-plugin-for-large-api-responses): paste the script into **Edit Markup → Serverless**, select **Node**, save, reset the impaired status, then force a refresh. Verify the script is present in that tab after new imports too.
 
@@ -106,11 +106,23 @@ The current hot-water feature name uses `dhwCylinder`; older instructions may re
 
 ## Heating curve and data age
 
-The full layout shows a **schematic**, using `20 + offset + slope × (20 − outdoor temperature)` across −20 to +20 °C outdoors, clipped to 20–60 °C on the vertical axis. It illustrates the parameters; it does not calculate Viessmann setpoints. Room setpoint, model-specific control, heating limits and maximum supply settings are not simulated. An exact curve requires a verified model formula or reference points. Compact layouts show temperatures without the chart.
+The full layout calculates the six values at −30, −20, −10, 0, 10 and 20 °C, with intermediate points for the complete graph. It uses the E3 variant implemented in [PyViCare's heat-curve calculation](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatCurveCalculation.py). [PyViCare selects this variant](https://github.com/somm15/PyViCare/blob/master/PyViCare/PyViCareHeatingDevice.py) for devices with both `type:heatpump` and `type:E3`, matching the supplied inventory.
 
-The screenshot's 50 °C maximum supply setting is not a current sensor reading and is not used as one.
+For outdoor temperature `x`, room target `t`, slope `s`, offset `n`, and `d = x − t`:
 
-Timestamps use UTC, formatted according to the selected display language. Data is marked stale based on the oldest displayed API timestamp, by default after 120 minutes. Missing timestamps are identified explicitly. An E-Ink screen can retain its last image when offline: the stale badge cannot update itself until another screen is rendered. Always check the visible timestamp.
+```text
+unlimited supply = t + n − s × d × (1.4347 + 0.021 × d + 0.0002479 × d²)
+```
+
+The configured API minimum and maximum from `heating.circuits.N.temperature.levels` are then applied independently. This produces the nonlinear shape and the upper plateau. Command constraints are never used as the configured limit. If the API maximum is missing, the optional `max_supply_temperature` field can provide it; the chart identifies whether its maximum came from the API or configuration. Otherwise it explicitly says the limit is unavailable.
+
+Room target is read from `heating.circuits.N.operating.programs.active` and the corresponding `operating.programs.PROGRAM.properties.temperature.value`. Plotting can fall back to the normal/normalHeating program. If neither is available, no room temperature is invented and the curve is omitted. A direct supply-target feature can be configured with `supply_setpoint_feature`; otherwise a target is calculated from this model and labelled as such. The main configured hot-water target comes from `water_setpoint_feature`, defaulting to `heating.dhw.temperature.main`; it is not a determination of the active DHW schedule.
+
+These are calculated curve values from live settings, not a verified direct export of ViCare's curve points. They do not simulate compressor behavior, room-feedback corrections or dampened outdoor readings. Compare with the app for the device/firmware. For exact known reference values, `curve_points` optionally accepts 2–41 JSON objects with numeric `outdoor` and `supply` values; these points replace the model and are labelled **Reference points**. Leave blank for dynamic calculation. Invalid references are flagged rather than presented as exact data.
+
+Freshness uses only valid supply, hot-water and outdoor sensor timestamps, ignoring curve, operating-mode and target-setting timestamps. This fixes false stale warnings caused by unchanged configuration. The default threshold remains 120 minutes. Sensor timestamps may themselves represent last changes rather than regular measurements, so their age does not prove an outage.
+
+Timestamps are formatted in the configured `time_zone`, defaulting to `Europe/Berlin`. Standard IANA zones and daylight-saving transitions are handled using `Intl.DateTimeFormat`; invalid zones fall back to UTC. Staleness always compares absolute timestamps and is unaffected by the display zone. An offline E-Ink screen cannot update its timestamp or stale badge until a new screen is rendered.
 
 ## Development, previews and tests
 
@@ -127,7 +139,7 @@ python auxiliary/package.py
 
 Open `auxiliary/output/preview.html` locally. Its plugin-language selector demonstrates English and German with sample data or without a connection. All surrounding preview controls use English. `auxiliary/output/demo-data.json` is a synthetic API fixture; it is not shipped as live data. To preview in TRMNL, temporarily use Static strategy with this fixture, then restore Polling before live use.
 
-Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
+Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
 
 ## Official references
 

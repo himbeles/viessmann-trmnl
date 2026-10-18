@@ -6,9 +6,9 @@ test('disconnected renders placeholders without an invented curve',async()=>{
   const html=await render();
   assert.match(html,/Not connected/);assert.doesNotMatch(html,/<polyline/);assert.doesNotMatch(html,/NaN|undefined/);
 });
-test('API-shaped fixture renders all metrics and labelled schematic',async()=>{
+test('API-shaped fixture renders all metrics and labelled calculated curve',async()=>{
   const html=await render(sample);
-  for(const text of ['32.4','48.2','7.8','0.5','Heating + hot water','DEMO · Sample data','not Viessmann setpoints'])assert.ok(html.includes(text),text);
+  for(const text of ['32.4','48.2','7.8','0.5','Heating + hot water','DEMO · Sample data','Calculated · API settings'])assert.ok(html.includes(text),text);
   assert.match(html,/<polyline/);assert.doesNotMatch(html,/NaN|undefined/);
 });
 test('zero and negative temperatures survive mapping',async()=>{
@@ -17,11 +17,11 @@ test('zero and negative temperatures survive mapping',async()=>{
 });
 test('disabled and failed sensors are not displayed',async()=>{
   const p=structuredClone(sample);p.data[0].isEnabled=false;p.data[1].properties.status={value:'error'};
-  const html=await render(p);assert.doesNotMatch(html,/32.4|48.2/);assert.match(html,/Incomplete data/);
+  const html=await render(p);assert.doesNotMatch(html,/>32\.4<span|>48\.2<span/);assert.match(html,/Incomplete data/);
 });
 test('oldest displayed timestamp determines stale flag',async()=>{
   const p=structuredClone(sample);p.demo=false;p.data[2].timestamp='2020-01-01T00:00:00Z';
-  const html=await render(p);assert.match(html,/Stale data/);assert.match(html,/2020-01-01 00:00/);
+  const html=await render(p);assert.match(html,/Stale data/);assert.ok(html.includes('01/01/2020, 01:00'));
 });
 test('missing timestamps are explicitly identified',async()=>{
   const p=structuredClone(sample);p.demo=false;delete p.data[0].timestamp;

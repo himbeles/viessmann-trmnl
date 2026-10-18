@@ -16,8 +16,8 @@ for (const layout of layouts) {
       const source = await readFile(new URL(`${layout}.liquid`, root), 'utf8');
       const html = await render(sample, options(language), source);
       const expected = language === 'de'
-        ? ['lang="de"', 'Viessmann Wärmepumpe', '32,4', '48,2', '7,8', '0,5', 'Heizen + Warmwasser', 'DEMO · Beispieldaten', '18.10. 18:00', 'keine Viessmann-Sollwerte']
-        : ['lang="en"', 'Viessmann heat pump', '32.4', '48.2', '7.8', '0.5', 'Heating + hot water', 'DEMO · Sample data', '2026-10-18 18:00', 'not Viessmann setpoints'];
+        ? ['lang="de"', 'Viessmann Wärmepumpe', '32,4', '48,2', '7,8', '0,5', 'Heizen + Warmwasser', 'DEMO · Beispieldaten', '18.10.2026, 20:00', 'Berechnet · API-Einstellungen']
+        : ['lang="en"', 'Viessmann heat pump', '32.4', '48.2', '7.8', '0.5', 'Heating + hot water', 'DEMO · Sample data', '18/10/2026, 20:00', 'Calculated · API settings'];
       for (const text of expected) assert.ok(html.includes(text), text);
       assert.doesNotMatch(html, /NaN|undefined|\{%|\{\{/);
       if (language === 'en') assert.doesNotMatch(html, /Heizkurve|Wärmepumpe|Beispieldaten|Außentemperatur|Ältester/);
@@ -37,7 +37,7 @@ test('missing and unsupported language selections fall back to English', async (
 
 test('German translates connection, missing and stale states', async () => {
   const empty = await render({}, options('de'));
-  for (const text of ['Noch nicht verbunden', 'Messzeitpunkt fehlt', 'Werte unvollständig', 'Heizkurve erscheint']) assert.ok(empty.includes(text), text);
+  for (const text of ['Noch nicht verbunden', 'Messzeitpunkt fehlt', 'Werte unvollständig', 'Heizkurve benötigt']) assert.ok(empty.includes(text), text);
   const p = structuredClone(sample);
   p.demo = false;
   delete p.data[0].timestamp;
@@ -45,7 +45,7 @@ test('German translates connection, missing and stale states', async () => {
   p.data[0].timestamp = '2020-01-01T00:00:00Z';
   const stale = await render(p, options('de'));
   assert.match(stale, /Daten veraltet/);
-  assert.match(stale, /01\.01\. 00:00/);
+  assert.match(stale, /01\.01\.2020, 01:00/);
 });
 
 test('known operating modes are localized in both languages', async () => {
