@@ -36,6 +36,8 @@ RSpec.describe 'Viessmann heat pump' do
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         html = document(screen)
         expect(html.at_css('.vp')['lang']).to eq(language)
+        expect(html.at_css('.vp').to_html).not_to match(/\bAPI\b|calculated|berechnet|berechnung/i)
+        expect(html.css('.vp-badge')).to be_empty
         expect(html.at_css('.vp').text).not_to match(/\b(?:CEST|CET|MESZ|MEZ|UTC|GMT)\b/)
         expect(html.at_css('.vp-metrics').text).to include(language == 'de' ? '32,4' : '32.4')
         expect(html.at_css('.vp-mode').text).to include(language == 'de' ? 'Heizen + Warmwasser' : 'Heating + hot water')
@@ -109,9 +111,9 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.dig('setpoints', 'supply_calculated')).to be_nil
   end
 
-  it 'marks a model-derived supply target as calculated' do
+  it 'retains model-derived target metadata without a source annotation on the display' do
     expect(transform.dig('setpoints', 'supply_calculated')).to be(true)
-    expect(document(render).at_css('.vp-target').text).to include('calculated')
+    expect(document(render).at_css('.vp-target').text.strip).to start_with('Target:')
   end
 
   it 'accepts reference points without labelling them as live API curve points' do
@@ -380,6 +382,37 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.dig('heat', 'today_components').map { |item| item['updated'] }).to eq([
       '18.10.2026, 20:00', '18.10.2026, 12:00'
     ])
+  end
+
+  [
+    ['Europe/Berlin', 'de-DE', '18.10.2026', '20:00'],
+    ['America/New_York', 'en-US', '10/18/2026', '14:00'],
+    ['Europe/London', 'en-GB', '18/10/2026', '19:00'],
+    ['Asia/Tokyo', 'ja-JP', '2026/10/19', '03:00'],
+    ['UTC', 'sv-SE', '2026-10-18', '18:00']
+  ].each do |zone, locale, date, time|
+    %w[en de].each do |language|
+      it "uses #{zone} regional dates independently of #{language} labels" do
+        result = transform(language:, time_zone: zone)
+        expect(result.dig('freshness', 'date_locale')).to eq(locale)
+        expect(result.dig('freshness', 'oldest_sensor')).to include(date, time)
+        expect(result.dig('energy', 'power_updated')).to include(date, time)
+        expect(result.dig('heat', 'today_updated')).to include(date, time)
+      end
+    end
+  end
+
+  it 'resolves country dates for timezone aliases and uses ISO dates for fixed offsets' do
+    expect(transform(time_zone: 'US/Eastern').dig('freshness', 'oldest_sensor')).to include('10/18/2026', '14:00')
+    expect(transform(time_zone: 'Etc/GMT+3').dig('freshness', 'oldest_sensor')).to include('2026-10-18', '15:00')
+  end
+
+  it 'keeps invalid-reference warnings without calculation or API annotations' do
+    screen = render(custom_fields: { curve_points: 'invalid-json' })
+    html = document(screen)
+    expect(html.at_css('.vp-chart .vp-note').text).to include('Invalid reference points')
+    expect(html.at_css('.vp').to_html).not_to match(/\bAPI\b|calculated|berechnet|berechnung/i)
+    expect(html.at_css('.vp-chart svg')['aria-label']).to eq('Heating curve with supply limits')
   end
 
   it 'keeps the existing plugin target and the two different hosted OAuth encodings' do

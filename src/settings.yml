@@ -20,6 +20,7 @@ custom_fields:
     optional: true
   - keyname: time_zone
     name: Display time zone
+    description: Sets local time and regional date format independently of display language.
     field_type: time_zone
     default: Europe/Berlin
     optional: true

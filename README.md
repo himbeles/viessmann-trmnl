@@ -132,7 +132,7 @@ The default refresh interval is **15 minutes**, not seconds. The Serverless tran
 | API feature: hot-water cylinder temperature | `heating.dhw.sensors.temperature.dhwCylinder` | Feature used for the cylinder reading. |
 | API feature: outdoor temperature | `heating.sensors.temperature.outside` | Feature used for the outdoor reading. |
 | Mark readings stale after (minutes) | `120` | Age threshold for the oldest valid temperature sensor timestamp; configuration timestamps are excluded. |
-| API feature: supply setpoint | Blank | Optional direct supply-target feature. If unavailable, the target is calculated and labelled accordingly. |
+| API feature: supply setpoint | Blank | Optional direct supply-target feature. If unavailable, the target is calculated from the curve. |
 | API feature: configured hot-water target | `heating.dhw.temperature.main` | Configured main hot-water target; not necessarily the active scheduled target. |
 | Maximum supply temperature (fallback, °C) | Blank | Used only when the API does not expose the circuit maximum; API values take precedence. |
 | Heating curve reference points | Blank | Optional JSON reference pairs that override the dynamic model. Leave blank for live calculation. |
@@ -170,15 +170,15 @@ Each energy reading has its own stale indicator; full/wide layouts also show its
 
 The graph is recalculated on each refresh from the API's slope, offset, selected room setpoint, and circuit supply-temperature limits. It uses the nonlinear E3 calculation implemented by PyViCare for E3 heat pumps (matching the supplied Vitocal 250-A device roles), rather than the previous linear schema. All six reference temperatures are shown: **−30, −20, −10, 0, 10 and 20 °C**. Intermediate points draw the curve smoothly; minimum/maximum limits produce plateaus instead of clipping the chart. A dashed line identifies the maximum.
 
-The API features used here expose parameters, not a directly sampled ViCare curve. Values are therefore labelled **calculated** and should be compared with the app; firmware-specific control and filtered outdoor temperatures can cause differences. Room target comes from the active heating program, with a normal-program fallback for plotting. The curve is unavailable if no room target is supplied. There is no assumed 20 °C room target.
+The API features used here expose parameters, not a directly sampled ViCare curve. Values should be compared with the app; firmware-specific control and filtered outdoor temperatures can cause differences. Room target comes from the active heating program, with a normal-program fallback for plotting. The curve is unavailable if no room target is supplied. There is no assumed 20 °C room target.
 
 The circuit maximum is read from `heating.circuits.N.temperature.levels.properties.max.value`, with its minimum applied when available. If the maximum is unavailable, the chart says **Limit unavailable**. You can enter the device's current maximum in the fallback field (the supplied screenshot showed 50 °C); it is labelled as configuration and is overridden when the API provides a maximum. Do not use an API command's allowed input range as the configured maximum.
 
-Heating and hot-water tiles include target values. A configured supply-target feature is preferred; otherwise a model-derived target at the current outdoor reading is explicitly labelled **calculated**. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The full layout also shows the active room target. The plugin never changes heat-pump settings.
+Heating and hot-water tiles include target values. A configured supply-target feature is preferred; otherwise a model-derived target at the current outdoor reading is used. Calculation and API-source annotations are omitted from the display. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The full layout also shows the active room target. The plugin never changes heat-pump settings.
 
 **Why “Daten veraltet” appeared:** the previous implementation used the oldest timestamp across sensors, curve settings and mode. An unchanged curve or mode could therefore make the dashboard appear stale. Freshness now uses only valid supply, hot-water and outdoor sensor timestamps. Changing the time zone affects presentation, not age. A sensor's own API timestamp may still describe its last change rather than a new sample; an old timestamp alone does not prove the device is disconnected. Missing sensor timestamps are identified separately.
 
-Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Invalid zones fall back to UTC. Time-zone abbreviations and offsets are hidden on the display; conversion and day-boundary checks still use the configured zone.
+Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Dates follow that zone’s regional convention independently of label language: Berlin uses `18.10.2026`, New York `10/18/2026`, London `18/10/2026`, and Tokyo `2026/10/18`. Time stays in 24-hour format. UTC and fixed-offset zones use ISO-style `2026-10-18` dates; invalid zones fall back to UTC. Time-zone abbreviations and offsets remain hidden. Native `Intl.DateTimeFormat` formats dates using the zone’s country from the public-domain IANA zone table. Gregorian dates and Latin digits keep the day counters consistent.
 
 ## Troubleshooting
 
