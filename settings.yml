@@ -21,7 +21,7 @@ custom_fields:
   - keyname: device_id
     name: API device ID (verify against the device list)
     field_type: string
-    default: "1"
+    default: "0"
   - keyname: circuit
     name: Heating circuit (0 = first circuit)
     field_type: string
@@ -52,6 +52,7 @@ polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installa
   }}/devices/{{ device_id | url_encode }}/features/
 polling_headers: "Authorization: Bearer {{ oauth_access_token }}"
 polling_verb: GET
+serverless_language: node
 oauth_enabled: "true"
 oauth_authorize_url: https://iam.viessmann-climatesolutions.com/idp/v3/authorize
 oauth_token_url: https://iam.viessmann-climatesolutions.com/idp/v3/token

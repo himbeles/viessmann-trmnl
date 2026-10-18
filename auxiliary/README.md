@@ -12,10 +12,11 @@ full.liquid
 half_horizontal.liquid
 half_vertical.liquid
 quadrant.liquid
+transform.js               # Serverless response reduction
 auxiliary/                 # Documentation, debugging and development tools
 ```
 
-Only the five plugin files belong in the import ZIP, without a parent folder. Do not import a GitHub source ZIP: it includes a directory wrapper and auxiliary files. The plugin requires no local JavaScript or Python runtime; the tools in this folder are optional.
+Only the six plugin files belong in the import ZIP, without a parent folder. The flat archive includes `transform.js`, following the official CLI's Serverless transform-file support. Do not import a GitHub source ZIP: it includes a directory wrapper and auxiliary files. The plugin requires no local JavaScript or Python runtime; the tools in this folder are optional.
 
 To package the existing plugin files using Python's standard library, run from the repository root:
 
@@ -50,11 +51,21 @@ The plugin uses **Polling** with an hourly refresh interval (60 minutes). It sta
 6. Connect through TRMNL and authorize in the Viessmann window. TRMNL stores and refreshes the tokens.
 7. Save, then **Force Refresh**. In **Edit Markup / Your Variables**, verify the API response and compare the displayed values with ViCare.
 
+Verify **Enable PKCE? → Yes** after saving. A **code challenge required** error means a new authorization request must be started with PKCE enabled.
+
+## Serverless response reduction
+
+Viessmann's full feature response can exceed TRMNL's 100 KB polling limit. `transform.js` defines the documented `run(input)` entry point for the Node Serverless runtime. It selects the configured temperature features plus the selected circuit's curve and operating mode, then keeps only their required properties, enabled state and timestamps. It also returns only the runtime settings needed by the markup; credentials, commands and previous output are not echoed. No extra network requests are made.
+
+`settings.yml` enables `serverless_language: node`; the packager includes the script. For an existing connected plugin, follow the [upgrade instructions](../README.md#upgrade-an-existing-plugin-for-large-api-responses): paste the script into **Edit Markup → Serverless**, select **Node**, save, reset the impaired status, then force a refresh. Verify the script is present in that tab after new imports too.
+
+The [Serverless guide](https://help.trmnl.com/en/articles/14130649-serverless) describes the UI and function contract. The [official CLI](https://github.com/usetrmnl/trmnlp#serverless-transforms) documents `transform.js` upload support.
+
 The included settings use TRMNL's documented OAuth provider keys. Live authorization, automatic refresh and the device's actual feature availability still require verification with the account. A missing refresh token may indicate a scope or application-type mismatch.
 
 ## Optional API inventory helper
 
-The supplied screenshot identifies an indoor unit as **IDU-A Modular AWMIW.A1.19-V051**, with ViCare device ID **1**. The default API device ID is a starting candidate; verify it against the API inventory. The indoor-unit serial shown in ViCare is not automatically the gateway serial.
+The supplied screenshot identifies an indoor unit as **IDU-A Modular AWMIW.A1.19-V051**, with ViCare device ID **1**. The subsequently supplied API inventory identifies the heating device as **`0`**, model `E3_Vitocal_17`, with a Vitocal 250-A role. The API ID is the one used by this plugin and is now the default. The indoor-unit serial shown in ViCare is not automatically the gateway serial.
 
 The inventory request is:
 
@@ -74,7 +85,7 @@ The optional helper prompts privately for an existing access token. It uses GET 
 
 ```sh
 python auxiliary/inspect_api.py
-python auxiliary/inspect_api.py --installation INSTALLATION --gateway GATEWAY --device 1
+python auxiliary/inspect_api.py --installation INSTALLATION --gateway GATEWAY --device 0
 ```
 
 Each request consumes API quota. The helper has no polling or automatic retry. On HTTP 401 reconnect, on 403 check API permissions, and on 429 wait for the limit to reset. Inventory output contains installation and gateway identifiers; redact them before sharing.
@@ -116,7 +127,7 @@ python auxiliary/package.py
 
 Open `auxiliary/output/preview.html` locally. Its plugin-language selector demonstrates English and German with sample data or without a connection. All surrounding preview controls use English. `auxiliary/output/demo-data.json` is a synthetic API fixture; it is not shipped as live data. To preview in TRMNL, temporarily use Static strategy with this fixture, then restore Polling before live use.
 
-Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and live OAuth/API behavior have not been verified.
+Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
 
 ## Official references
 

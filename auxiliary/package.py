@@ -1,10 +1,10 @@
-"""Package exactly the five files in TRMNL's official private-plugin ZIP format."""
+"""Package the flat TRMNL plugin archive, including its Serverless transform."""
 import argparse
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ['settings.yml', 'full.liquid', 'half_horizontal.liquid', 'half_vertical.liquid', 'quadrant.liquid']
+FILES = ['settings.yml', 'full.liquid', 'half_horizontal.liquid', 'half_vertical.liquid', 'quadrant.liquid', 'transform.js']
 
 
 def main():
