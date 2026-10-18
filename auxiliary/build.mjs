@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { Liquid } from 'liquidjs';
 import vm from 'node:vm';
 
-export const root = new URL('../', import.meta.url);
+export const root = new URL('../src/', import.meta.url);
 export const layouts = ['full', 'half_horizontal', 'half_vertical', 'quadrant'];
 export const sample = {
   demo: true,

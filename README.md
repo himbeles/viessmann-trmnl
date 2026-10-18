@@ -12,6 +12,51 @@ The display defaults to **English**. Choose **Deutsch** in **Display language** 
 
 Feature availability depends on the device and API permissions. The initial mappings are candidates to verify against your device's feature response.
 
+## Update the existing plugin with trmnlp
+
+The repository follows the [official trmnlp project structure](https://github.com/usetrmnl/trmnlp#readme): versioned plugin files are in `src/`, `.trmnlp.yml` configures the project, and `bin/trmnlp` is the official launcher. It uses an installed Ruby gem if available, otherwise Docker. The Docker image and CI gem are pinned to **0.31.1**. The launcher is derived from TRMNL's MIT-licensed template; its license is in [auxiliary/TRMNLP-LICENSE.txt](auxiliary/TRMNLP-LICENSE.txt).
+
+The existing target is [plugin **510867**](https://trmnl.com/plugin_settings/510867/edit), recorded as `id` in `src/settings.yml`. Updating this instance avoids setting up another Viessmann OAuth connection.
+
+### Automatic updates from GitHub
+
+1. In your TRMNL account, open [Account → Developer](https://trmnl.com/account/developer/edit) and create an account API key. A scoped key needs profile/read/content access for the official CLI workflow.
+2. Open this repository's **Settings → Secrets and variables → Actions → New repository secret**.
+3. Name the secret **`TRMNL_API_KEY`** and enter the **TRMNL account API key**. This is a repository secret, not an environment secret, Viessmann Client ID or Viessmann access token.
+4. Open **Actions → TRMNL → Run workflow** on `main`. Future pushes to `main` also run it automatically.
+
+The workflow builds and tests the plugin, runs the official linter, builds a synthetic-data preview using the official Liquid runtime, and creates an import ZIP artifact. Once the key is configured, it updates the existing plugin. Without the secret, verification runs and deployment is explicitly skipped with a notice.
+
+The updater first uses `trmnlp clone` to download the current instance into an ignored temporary directory. It retains installed polling settings, OAuth settings, custom-field values and configured defaults, merges updated form definitions, and replaces the layouts and Node transform. After linting, it calls `trmnlp push --id 510867 --force`. It refuses a missing or mismatched plugin ID and deletes the temporary export afterward. Credentials are not added to repository source files.
+
+The setup can be tested without a TRMNL key; live synchronization requires that key and has to be confirmed by the deployment job. Do not use **Import new** for routine updates to this connected instance.
+
+### Update from your computer
+
+Install Node.js 24 and either Docker or Ruby 4.0+ with `gem install trmnl_preview --version 0.31.1`. From the repository root:
+
+```sh
+npm --prefix auxiliary ci
+./bin/trmnlp login
+node auxiliary/deploy.mjs --dry-run
+node auxiliary/deploy.mjs --yes
+```
+
+`login` stores the TRMNL API key in the official CLI's local configuration. Alternatively set `TRMNL_API_KEY` in your shell environment. No Viessmann credential needs to be re-entered for an update. The dry run reads the installed instance and validates the merged update without uploading it.
+
+Use this helper for updates that retain saved instance settings. A direct `trmnlp push` uploads the versioned settings as well as code. Before changing the target plugin, clone its actual settings and verify its ID; never remove the ID to update an existing instance, because the CLI creates a new plugin when no target is provided.
+
+### Preview without an account connection
+
+```sh
+npm --prefix auxiliary ci
+npm --prefix auxiliary run build
+node auxiliary/prepare-preview.mjs
+(cd auxiliary/output/preview-plugin && ../../../bin/trmnlp serve)
+```
+
+Open `http://localhost:4567`. This generated project uses synthetic Static Data and requires no OAuth login. The production plugin in `src/` remains on Polling. For the lightweight browser preview, open `auxiliary/output/preview.html` instead. Developer tools and debugging instructions remain in [auxiliary/](auxiliary/README.md).
+
 ## Install
 
 1. Clone or download this repository.
@@ -24,7 +69,7 @@ Feature availability depends on the device and API permissions. The initial mapp
 3. In TRMNL, open **Plugins → Private Plugin → Import new** and select `auxiliary/output/viessmann-trmnl-import.zip`.
 4. Open the imported plugin's settings and complete the configuration below.
 
-The packager includes `settings.yml`, the four Liquid layouts and `transform.js`, without a parent folder. The transform runs in TRMNL's Serverless Node runtime to reduce the large Viessmann response before storage and rendering. Do not import GitHub's repository ZIP directly. You can also ZIP these six files manually; Node.js is not needed on your own computer to install or run the plugin.
+The packager includes `settings.yml`, the four Liquid layouts and `transform.js`, without a parent folder. The transform runs in TRMNL's Serverless Node runtime to reduce the large Viessmann response before storage and rendering. Do not import GitHub's repository ZIP directly. You can also ZIP these six files from `src/` manually; Node.js is not needed on your own computer to install or run the plugin.
 
 ## Configure the API connection
 
@@ -121,9 +166,9 @@ Local time defaults to **Europe/Berlin**, including winter/summer transitions. C
 
 ### Updating an existing connected plugin
 
-1. Replace the Serverless code with the latest [`transform.js`](transform.js), keeping **Node** selected.
-2. Replace the four layout tabs with the corresponding `.liquid` files from this repository.
-3. Copy the `custom_fields` section from [`settings.yml`](settings.yml) into the plugin's Form Fields definition; retain existing field values and OAuth settings.
+1. Replace the Serverless code with the latest [`transform.js`](src/transform.js), keeping **Node** selected.
+2. Replace the four layout tabs with the corresponding `.liquid` files in `src/`.
+3. Copy the `custom_fields` section from [`settings.yml`](src/settings.yml) into the plugin's Form Fields definition; retain existing field values and OAuth settings.
 4. Save, set your time zone, then **Force Refresh**. If the plugin is impaired, reset its status first.
 
 Keep `curve_points` blank for dynamic calculation. The [auxiliary guide](auxiliary/README.md#heating-curve-and-data-age) documents the model and optional reference-point override.
@@ -135,7 +180,7 @@ The full Viessmann feature list can exceed TRMNL's 100 KB polling limit. The inc
 To update an already connected plugin without creating another instance:
 
 1. In TRMNL, open the existing plugin → **Edit Markup → Serverless**.
-2. Select **Node** and paste the complete contents of [`transform.js`](transform.js).
+2. Select **Node** and paste the complete contents of [`transform.js`](src/transform.js).
 3. Save the code and verify that **Serverless Language** in the plugin settings is **Node**.
 4. Keep your existing polling URL, identifiers, OAuth connection and PKCE setting.
 5. Select **Reset status** (German: **Status zurücksetzen**) to clear the impaired state, then **Force Refresh**.

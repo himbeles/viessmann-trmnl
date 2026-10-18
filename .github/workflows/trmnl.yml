@@ -1,0 +1,81 @@
+name: TRMNL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trmnl-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: auxiliary/package-lock.json
+      - run: npm --prefix auxiliary ci
+      - run: npm --prefix auxiliary run build
+      - run: npm --prefix auxiliary test
+      - name: Verify generated layouts are current
+        run: git diff --exit-code -- src
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - run: gem install trmnl_preview --version 0.31.1 --no-document
+      - run: ./bin/trmnlp lint
+      - name: Build a preview with the official Liquid runtime and synthetic data
+        run: |
+          node auxiliary/prepare-preview.mjs
+          cd auxiliary/output/preview-plugin
+          ../../../bin/trmnlp build
+      - run: python auxiliary/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viessmann-trmnl-import
+          path: auxiliary/output/viessmann-trmnl-import.zip
+
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check TRMNL API key configuration
+        id: config
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+        run: |
+          if [ -n "$TRMNL_API_KEY" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Add the TRMNL_API_KEY repository secret to enable updates to plugin 510867.'
+          fi
+      - uses: actions/checkout@v6
+        if: steps.config.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.config.outputs.ready == 'true'
+        with:
+          node-version: '24'
+      - run: npm --prefix auxiliary ci
+        if: steps.config.outputs.ready == 'true'
+      - uses: ruby/setup-ruby@v1
+        if: steps.config.outputs.ready == 'true'
+        with:
+          ruby-version: '4.0'
+      - run: gem install trmnl_preview --version 0.31.1 --no-document
+        if: steps.config.outputs.ready == 'true'
+      - name: Update existing plugin and retain its saved settings
+        if: steps.config.outputs.ready == 'true'
+        env:
+          TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
+        run: node auxiliary/deploy.mjs --yes

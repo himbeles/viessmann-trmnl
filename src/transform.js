@@ -61,7 +61,9 @@ function run(input) {
   const result = {
     data,
     trmnl: {
-      system: { timestamp_utc: numeric(source.trmnl?.system?.timestamp_utc) ?? 0 },
+      // Hosted Serverless omits trmnl.system; use the VM clock in that case.
+      system: { timestamp_utc: numeric(source.trmnl?.system?.timestamp_utc) > 0
+        ? numeric(source.trmnl.system.timestamp_utc) : Math.floor(Date.now() / 1000) },
       plugin_settings: { custom_fields_values: settings }
     }
   };

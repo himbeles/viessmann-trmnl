@@ -1,9 +1,15 @@
 name: Viessmann heat pump
+id: 510867
 strategy: polling
 refresh_interval: 60
 no_screen_padding: 'no'
 dark_mode: 'no'
 custom_fields:
+  - keyname: author_bio
+    field_type: author_bio
+    name: About this plugin
+    description: Read-only Viessmann heat-pump dashboard with English and German displays.
+    github_url: https://github.com/himbeles/viessmann-trmnl
   - keyname: language
     name: Display language
     field_type: select

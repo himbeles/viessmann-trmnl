@@ -64,11 +64,12 @@ test('known operating modes are localized in both languages', async () => {
   }
 });
 
-test('root uses a flat plugin layout with Serverless, English settings and a language selector', async () => {
+test('src uses the official plugin layout with Serverless, English settings and a language selector', async () => {
   const entries = (await readdir(root)).filter(name => !name.startsWith('.'));
-  assert.deepEqual(entries.sort(), ['README.md', 'auxiliary', 'settings.yml', 'transform.js', ...layouts.map(name => `${name}.liquid`)].sort());
+  assert.deepEqual(entries.sort(), ['settings.yml', 'transform.js', ...layouts.map(name => `${name}.liquid`)].sort());
   const settings = YAML.parse(await readFile(new URL('settings.yml', root), 'utf8'));
   assert.equal(settings.name, 'Viessmann heat pump');
+  assert.equal(settings.id, 510867);
   assert.equal(settings.strategy, 'polling');
   assert.equal(settings.serverless_language, 'node');
   assert.equal(settings.no_screen_padding, 'no');

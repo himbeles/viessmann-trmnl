@@ -104,6 +104,16 @@ test('local midnight invalidates yesterday even while the UTC date is unchanged'
   assert.equal(transform(source).energy.today_kwh, 5);
 });
 
+test('hosted Serverless can use its own clock when trmnl.system is omitted', () => {
+  const source = fixture();
+  delete source.trmnl.system;
+  const before = Math.floor(Date.now() / 1000);
+  const result = transform(source);
+  assert.ok(result.trmnl.system.timestamp_utc >= before);
+  assert.ok(result.trmnl.system.timestamp_utc <= Math.floor(Date.now() / 1000));
+  assert.match(result.energy.today_date, /^\d{4}-\d{2}-\d{2}$/);
+});
+
 test('power is a timestamped snapshot with its own stale flag', () => {
   const item = devicePower(); item.timestamp = '2026-10-18T10:00:00Z';
   const result = transform(fixture([item, total()]));

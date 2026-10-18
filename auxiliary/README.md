@@ -4,19 +4,23 @@ A read-only private TRMNL plugin. English is the default; select **Deutsch** in 
 
 ## Repository and import format
 
-The repository root contains the official flat plugin files:
+The repository follows the official trmnlp project structure. Plugin source files live in `src/`:
 
 ```text
-settings.yml
-full.liquid
-half_horizontal.liquid
-half_vertical.liquid
-quadrant.liquid
-transform.js               # Serverless response reduction
+.trmnlp.yml
+bin/trmnlp
+.github/workflows/trmnl.yml
+src/
+  settings.yml
+  full.liquid
+  half_horizontal.liquid
+  half_vertical.liquid
+  quadrant.liquid
+  transform.js
 auxiliary/                 # Documentation, debugging and development tools
 ```
 
-Only the six plugin files belong in the import ZIP, without a parent folder. The flat archive includes `transform.js`, following the official CLI's Serverless transform-file support. Do not import a GitHub source ZIP: it includes a directory wrapper and auxiliary files. The plugin requires no local JavaScript or Python runtime; the tools in this folder are optional.
+Only the six files from `src/` belong in the import ZIP, without a parent folder. The flat archive includes `transform.js`, following the official CLI's Serverless transform-file support. Do not import a GitHub source ZIP: it includes a directory wrapper and auxiliary files. The plugin requires no local JavaScript or Python runtime; the tools in this folder are optional.
 
 To package the existing plugin files using Python's standard library, run from the repository root:
 
@@ -27,6 +31,16 @@ python auxiliary/package.py
 This creates and verifies `auxiliary/output/viessmann-trmnl-import.zip`. A different output path can be selected with `--output PATH`. In TRMNL, open **Plugins → Private Plugin → Import new** and select this ZIP. Developer features or a BYOD license are required for private plugins.
 
 The plugin uses **Polling** with an hourly refresh interval (60 minutes). It starts without credentials or sample readings. Complete the API identifiers and OAuth configuration before the first successful refresh.
+
+## Existing-instance deployment
+
+See the [root README](../README.md#update-the-existing-plugin-with-trmnlp) for one-time API-key setup. Plugin **510867** is the configured target. The GitHub Actions workflow uses a **repository** secret called `TRMNL_API_KEY` and runs `node auxiliary/deploy.mjs --yes` only after verification.
+
+The deployment helper calls the official CLI to clone the target, preserves its exported instance settings, merges form definitions, overlays the current source, lints, and pushes to the explicit same ID. A wrong/missing ID aborts. `--dry-run` exercises clone/merge/lint without a push. Temporary exports are ignored and removed on success or failure. The workflow does not need Viessmann OAuth tokens in GitHub.
+
+The versioned `.trmnlp.yml` intentionally excludes the linter's `no_style_restyling_framework` rule to retain this existing custom dashboard's typography. All other current checks run. No deployment happens if the TRMNL repository secret is missing.
+
+The hosted Serverless input does not include `trmnl.system`; `transform.js` uses the VM's own clock in that case. Tests can supply a timestamp for deterministic day-boundary checks.
 
 ## Connect Viessmann directly
 
@@ -57,7 +71,7 @@ Verify **Enable PKCE? → Yes** after saving. A **code challenge required** erro
 
 Viessmann's full feature response can exceed TRMNL's 100 KB polling limit. `transform.js` defines the documented `run(input)` entry point for the Node Serverless runtime. It selects temperature readings, target settings, the selected circuit's curve, operating mode, active heating program and supply-temperature limits, then keeps only their required properties, enabled state and timestamps. It also returns only the runtime settings needed by the markup; credentials, commands and previous output are not echoed. No extra network requests are made.
 
-`settings.yml` enables `serverless_language: node`; the packager includes the script. For an existing connected plugin, follow the [upgrade instructions](../README.md#upgrade-an-existing-plugin-for-large-api-responses): paste the script into **Edit Markup → Serverless**, select **Node**, save, reset the impaired status, then force a refresh. Verify the script is present in that tab after new imports too.
+`src/settings.yml` enables `serverless_language: node`; the packager includes the script. For an existing connected plugin, follow the [upgrade instructions](../README.md#upgrade-an-existing-plugin-for-large-api-responses): paste `src/transform.js` into **Edit Markup → Serverless**, select **Node**, save, reset the impaired status, then force a refresh. Verify the script is present in that tab after new imports too.
 
 The [Serverless guide](https://help.trmnl.com/en/articles/14130649-serverless) describes the UI and function contract. The [official CLI](https://github.com/usetrmnl/trmnlp#serverless-transforms) documents `transform.js` upload support.
 
@@ -147,7 +161,7 @@ Timestamps are formatted in the configured `time_zone`, defaulting to `Europe/Be
 
 ## Development, previews and tests
 
-All development files live here; the root `full.liquid` and `settings.yml` are the source plugin files. Build regenerates the three compact layouts from `full.liquid`, along with local preview files in ignored `auxiliary/output/`.
+All development files live here; the `src/full.liquid` and `src/settings.yml` are the source plugin files. Build regenerates the three compact layouts from `full.liquid`, along with local preview files in ignored `auxiliary/output/`.
 
 From the repository root:
 
@@ -160,7 +174,7 @@ python auxiliary/package.py
 
 Open `auxiliary/output/preview.html` locally. Its plugin-language selector demonstrates English and German with sample data or without a connection. All surrounding preview controls use English. `auxiliary/output/demo-data.json` is a synthetic API fixture; it is not shipped as live data. To preview in TRMNL, temporarily use Static strategy with this fixture, then restore Polling before live use.
 
-Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, electrical/thermal units and source separation, day-counter rollover and totals, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and hosted Serverless behavior have not been verified; the user has confirmed successful OAuth authorization with PKCE enabled.
+Tests cover all layouts and both languages, English fallback, status messages, localized numbers and dates, time zones and DST transitions, nonlinear curves and temperature caps, electrical/thermal units and source separation, day-counter rollover and totals, missing/disabled/failed sensors, zero/negative values, stale/missing timestamps, custom mappings and safe HTML escaping. Transform tests cover oversized inputs, small outputs, configuration preservation and removal of commands and credentials. Packaging validates the exact flat file list and template size limit. Physical TRMNL X rendering and live updates still require account verification; the user has confirmed successful OAuth authorization with PKCE enabled.
 
 ## Official references
 

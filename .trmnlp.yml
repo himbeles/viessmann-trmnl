@@ -1,0 +1,12 @@
+---
+watch:
+  - src
+  - .trmnlp.yml
+time_zone: Europe/Berlin
+transform_runtime: enabled
+custom_fields: {}
+variables:
+  trmnl: {}
+# Preserve the existing custom dashboard typography rather than redesigning it.
+ignored_lint_rules:
+  - no_style_restyling_framework
