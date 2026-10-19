@@ -534,7 +534,8 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.fetch('energy')).to include('yesterday_kwh' => 15.8, 'trend' => 'down')
     expect(result.fetch('heat')).to include('yesterday_kwh' => 50, 'trend' => 'down')
     html = document(render('full', 'de'))
-    expect(html.css('.vp-yesterday').map(&:text)).to include('Gestern15,8 kWh', 'Gestern50 kWh')
+    expect(html.css('.vp-yesterday').map(&:text)).to eq(['Gestern15,8 kWh'])
+    expect(html.css('.vp-energy > div')[1].css('.vp-yesterday, .vp-trend')).to be_empty
     expect(html.css('.vp-day-comparison').first.element_children.map { |node| node['class'] }).to eq(%w[vp-yesterday vp-comparison-arrow vp-today])
     expect(html.css('.vp-trend').map { |node| node['aria-label'] }).to all(eq('Heute niedriger als gestern'))
   end
