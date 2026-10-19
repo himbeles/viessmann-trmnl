@@ -1,127 +1,121 @@
-name: Viessmann heat pump
-id: 510867
+---
 strategy: polling
-refresh_interval: 15
 no_screen_padding: 'no'
 dark_mode: 'no'
-custom_fields:
-  - keyname: author_bio
-    field_type: author_bio
-    name: About this plugin
-    description: Read-only Viessmann heat-pump dashboard with English and German displays.
-    github_url: https://github.com/himbeles/viessmann-trmnl
-  - keyname: language
-    name: Display language
-    field_type: select
-    options:
-      - English: en
-      - Deutsch: de
-    default: en
-    optional: true
-  - keyname: time_zone
-    name: Display time zone
-    description: Sets local time and regional date format independently of display language.
-    field_type: time_zone
-    default: Europe/Berlin
-    optional: true
-  - keyname: installation_id
-    name: API installation ID
-    field_type: string
-  - keyname: gateway_serial
-    name: API gateway serial number
-    field_type: string
-  - keyname: device_id
-    name: API device ID (verify against the device list)
-    field_type: string
-    default: "0"
-  - keyname: circuit
-    name: Heating circuit (0 = first circuit)
-    field_type: string
-    default: "0"
-    optional: true
-  - keyname: supply_feature
-    name: "API feature: supply temperature"
-    field_type: string
-    default: auto
-    description: "Auto prefers the selected heating circuit sensor; heat-pump supply is a labelled fallback. Enter a feature name to use a custom sensor."
-    optional: true
-  - keyname: water_feature
-    name: "API feature: hot-water cylinder temperature"
-    field_type: string
-    default: heating.dhw.sensors.temperature.dhwCylinder
-    optional: true
-  - keyname: outside_feature
-    name: "API feature: outdoor temperature"
-    field_type: string
-    default: heating.sensors.temperature.outside
-    optional: true
-  - keyname: stale_minutes
-    name: Daily-counter read-time warning (minutes)
-    description: Shows an age marker only when dayValueReadAt exceeds this threshold.
-    field_type: string
-    default: "120"
-    optional: true
-  - keyname: supply_setpoint_feature
-    name: "API feature: supply setpoint (optional)"
-    field_type: string
-    optional: true
-    description: Use the feature containing the actual supply target. Leave blank if
-      unavailable; no target is invented.
-  - keyname: water_setpoint_feature
-    name: "API feature: configured hot-water target"
-    field_type: string
-    default: heating.dhw.temperature.main
-    optional: true
-  - keyname: curve_points
-    name: Heating curve reference points (optional JSON)
-    field_type: text
-    optional: true
-    description: Optional reference pairs to override the calculated E3 curve. Leave
-      blank for dynamic calculation from API slope, offset, room target and
-      limits.
-  - keyname: max_supply_temperature
-    name: Maximum supply temperature (fallback, °C)
-    field_type: number
-    optional: true
-    min: 0
-    max: 100
-    description: Only used when the API omits the circuit maximum. Enter the current
-      device setting (e.g. 50); API values take precedence.
-  - keyname: current_power_feature
-    name: "API feature: current electrical power (optional)"
-    field_type: string
-    optional: true
-    description: "Blank: prefer device power, otherwise compressor 0. The reading
-      scope is displayed. The API property must include W or kW units."
-  - keyname: daily_energy_feature
-    name: "API feature: electricity used today (optional)"
-    field_type: string
-    optional: true
-    description: "Blank: prefer device total, otherwise add heating and DHW
-      summaries (plus cooling when present). Uses currentDay or day[0], with
-      Wh/kWh units and a timestamp from today."
-  - keyname: current_heat_feature
-    name: "API feature: current thermal output (optional)"
-    field_type: string
-    optional: true
-    description: "Blank: prefer device heat production, otherwise compressor 0.
-      Requires W/kW units."
-  - keyname: daily_heat_feature
-    name: "API feature: heat delivered today (optional)"
-    field_type: string
-    optional: true
-    description: "Blank: prefer heating.heat.production.total when exposed, otherwise heating +
-      DHW. Requires a currentDay/day[0] counter with Wh/kWh units and a
-      timestamp from today."
-polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{
-  installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode
-  }}/devices/{{ device_id | url_encode }}/features/
-polling_headers: "Authorization=Bearer {{ oauth_access_token }}"
-polling_verb: GET
+static_data: ''
+polling_verb: get
+framework_version: 3.4.3
 serverless_language: node
-oauth_enabled: "true"
+refresh_interval_floor: '5'
+polling_url: https://api.viessmann-climatesolutions.com/iot/v2/features/installations/{{ installation_id | url_encode }}/gateways/{{ gateway_serial | url_encode }}/devices/{{ device_id | url_encode }}/features/
+polling_headers: Authorization=Bearer {{ oauth_access_token }}
+polling_body: ''
+id: 510867
+oauth_enabled: 'true'
+oauth_pkce_enabled: 'yes'
 oauth_authorize_url: https://iam.viessmann-climatesolutions.com/idp/v3/authorize
 oauth_token_url: https://iam.viessmann-climatesolutions.com/idp/v3/token
 oauth_scopes: IoT User offline_access
-oauth_pkce_enabled: "yes"
 oauth_token_request_auth_method: body
+custom_fields:
+- keyname: author_bio
+  field_type: author_bio
+  name: About this plugin
+  description: Read-only Viessmann heat-pump dashboard with English and German displays.
+  github_url: https://github.com/himbeles/viessmann-trmnl
+- keyname: language
+  name: Display language
+  field_type: select
+  options:
+  - English: en
+  - Deutsch: de
+  default: en
+  optional: true
+- keyname: time_zone
+  name: Display time zone
+  description: Sets local time and regional date format independently of display language.
+  field_type: time_zone
+  default: Europe/Berlin
+  optional: true
+- keyname: installation_id
+  name: API installation ID
+  field_type: string
+- keyname: gateway_serial
+  name: API gateway serial number
+  field_type: string
+- keyname: device_id
+  name: API device ID (verify against the device list)
+  field_type: string
+  default: '0'
+- keyname: circuit
+  name: Heating circuit (0 = first circuit)
+  field_type: string
+  default: '0'
+  optional: true
+- keyname: supply_feature
+  name: 'API feature: supply temperature'
+  field_type: string
+  default: auto
+  description: Auto prefers the selected heating circuit sensor; heat-pump supply is a labelled fallback. Enter a feature name to use a custom sensor.
+  optional: true
+- keyname: water_feature
+  name: 'API feature: hot-water cylinder temperature'
+  field_type: string
+  default: heating.dhw.sensors.temperature.dhwCylinder
+  optional: true
+- keyname: outside_feature
+  name: 'API feature: outdoor temperature'
+  field_type: string
+  default: heating.sensors.temperature.outside
+  optional: true
+- keyname: stale_minutes
+  name: Daily-counter read-time warning (minutes)
+  description: Shows an age marker only when dayValueReadAt exceeds this threshold.
+  field_type: string
+  default: '120'
+  optional: true
+- keyname: supply_setpoint_feature
+  name: 'API feature: supply setpoint (optional)'
+  field_type: string
+  optional: true
+  description: Use the feature containing the actual supply target. Leave blank if unavailable; no target is invented.
+- keyname: water_setpoint_feature
+  name: 'API feature: configured hot-water target'
+  field_type: string
+  default: heating.dhw.temperature.main
+  optional: true
+- keyname: curve_points
+  name: Heating curve reference points (optional JSON)
+  field_type: text
+  optional: true
+  description: Optional reference pairs to override the calculated E3 curve. Leave blank for dynamic calculation from API slope, offset, room target and limits.
+- keyname: max_supply_temperature
+  name: Maximum supply temperature (fallback, °C)
+  field_type: number
+  optional: true
+  min: 0
+  max: 100
+  description: Only used when the API omits the circuit maximum. Enter the current device setting (e.g. 50); API values take precedence.
+- keyname: current_power_feature
+  name: 'API feature: current electrical power (optional)'
+  field_type: string
+  optional: true
+  description: 'Blank: prefer device power, otherwise compressor 0. The reading scope is displayed. The API property must include W or kW units.'
+- keyname: daily_energy_feature
+  name: 'API feature: electricity used today (optional)'
+  field_type: string
+  optional: true
+  description: 'Blank: prefer device total, otherwise add heating and DHW summaries (plus cooling when present). Uses currentDay or day[0], with Wh/kWh units and a timestamp from today.'
+- keyname: current_heat_feature
+  name: 'API feature: current thermal output (optional)'
+  field_type: string
+  optional: true
+  description: 'Blank: prefer device heat production, otherwise compressor 0. Requires W/kW units.'
+- keyname: daily_heat_feature
+  name: 'API feature: heat delivered today (optional)'
+  field_type: string
+  optional: true
+  description: 'Blank: prefer heating.heat.production.total when exposed, otherwise heating + DHW. Requires a currentDay/day[0] counter with Wh/kWh units and a timestamp from today.'
+name: Viessmann heat pump
+description: ''
+refresh_interval: 15
