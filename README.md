@@ -25,6 +25,21 @@ The installation, gateway, and device IDs are different from the Client ID. A Vi
 
 The standard setup uses a public OAuth client with PKCE and an empty Client Secret. TRMNL manages the access and refresh tokens; you do not enter tokens in the plugin's custom fields.
 
+## Find your API parameters
+
+1. Sign in to the [Viessmann Developer Portal](https://app.developer.viessmann-climatesolutions.com/) with the same account you use for ViCare. Open **My Dashboard → Your clients**, create or edit a public client, and copy its **Client ID**.
+2. Register the exact **OAuth Redirect URL** shown in your TRMNL plugin settings. Also add **`http://localhost:51125`** (no trailing slash) for the local discovery helper; keep the TRMNL redirect registered.
+3. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run this from the cloned repository on a computer with a browser:
+
+   ```sh
+   uv run --script auxiliary/inspect_api.py --client-id YOUR_CLIENT_ID
+   ```
+
+   Sign in to Viessmann in the browser. `uv` installs the Python version and dependencies declared in the script; no separate `pip install` is needed.
+4. In the printed inventory, find your heating device. Copy the containing installation's `id` to `installation_id`, its gateway's `serial` to `gateway_serial`, and the device's `id` to `device_id`. Enter your Client ID separately in TRMNL's OAuth settings.
+
+See the [detailed discovery guide](auxiliary/troubleshooting.md#find-installation-gateway-and-device-ids) for an output example, token-based access, and feature inspection.
+
 ## Setup
 
 1. Clone this repository and install [trmnlp](https://github.com/usetrmnl/trmnlp#readme).

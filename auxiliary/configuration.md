@@ -10,7 +10,7 @@ The plugin definition is [src/settings.yml](../src/settings.yml). Enter installa
 | `gateway_serial` | None | API gateway serial. |
 | `device_id` | `0` | API heating-device ID. This is a required field with a default, not an instruction to use `0` on every installation. |
 
-Find these values with the [inventory helper](troubleshooting.md#find-installation-gateway-and-device-ids). Do not substitute the Client ID, indoor-unit serial, or a device number displayed by ViCare.
+Follow [API parameter discovery](troubleshooting.md#find-installation-gateway-and-device-ids) to obtain the Client ID, register redirect URLs, and find the three device identifiers with the inventory helper. Do not substitute the Client ID, indoor-unit serial, or a device number displayed by ViCare.
 
 ## Display and circuit settings
 

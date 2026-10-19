@@ -60,7 +60,8 @@ jobs:
         env:
           TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}
       # Plugin-specific smoke check; publishing above uses the unmodified official command.
+      - uses: astral-sh/setup-uv@v7
       - name: Verify live Viessmann polling
-        run: python3 auxiliary/refresh.py
+        run: uv run --script auxiliary/refresh.py
         env:
           TRMNL_API_KEY: ${{ secrets.TRMNL_API_KEY }}

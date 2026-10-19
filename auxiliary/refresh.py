@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """Reset instance health and verify a real poll, without logging private data."""
 import json
 import os

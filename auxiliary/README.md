@@ -10,4 +10,4 @@ Use the [main README](../README.md) for requirements, initial setup, required pa
 | [API reference](api-reference.md) | Temperature sources, activity detection, component status, curve calculation, and time formatting. |
 | [Energy fields](api-energy-fields.md) | Electricity and heat source selection, units, daily totals, yesterday comparisons, and read-time markers. |
 
-The Python scripts in this directory are optional diagnostic tools. Run their commands from the repository root. They are not part of the published plugin.
+The Python scripts in this directory are optional diagnostic tools. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run their commands from the repository root with `uv run --script auxiliary/SCRIPT.py`. Each script declares its Python version and dependencies inline; uv manages them automatically. Start with the [Client ID and device-ID discovery instructions](troubleshooting.md#find-installation-gateway-and-device-ids). They are not part of the published plugin.
