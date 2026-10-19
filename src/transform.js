@@ -511,17 +511,17 @@ function run(input) {
   result.heat = readEnergy('heat.production', settings.current_heat_feature, settings.daily_heat_feature);
   // Bounded, read-only electricity diagnostics: never retain credentials, commands
   // or full history arrays. These readings distinguish source selection from API lag.
-  result.energy.counter_readings = features.filter(item => typeof item?.feature === 'string' &&
+  result.energy.counter_readings = Object.fromEntries(features.filter(item => typeof item?.feature === 'string' &&
     /^heating\.(?:(?:compressors\.\d+|heatingRod)\.)?power\.consumption\.(?:(?:summary\.)?(?:total|heating|dhw|cooling)|summary)$/.test(item.feature))
-    .slice(0, 24).map(item => ({
-      feature: item.feature, enabled: item.isEnabled !== false,
+    .slice(0, 24).map(item => [item.feature, {
+      enabled: item.isEnabled !== false,
       status: text(item.properties?.status?.value, null, 32),
       timestamp: text(item.timestamp, null, 64),
       day_read_at: text(item.properties?.dayValueReadAt?.value, null, 64),
       current_day_kwh: convert(item.properties?.currentDay, 'energy'),
       day_0_kwh: convert({ ...item.properties?.day, value: item.properties?.day?.value?.[0] }, 'energy'),
       day_1_kwh: convert({ ...item.properties?.day, value: item.properties?.day?.value?.[1] }, 'energy')
-    }));
+    }]));
 
 
   const pressureFeature = valid('heating.sensors.pressure.supply');
