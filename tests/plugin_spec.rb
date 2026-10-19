@@ -534,7 +534,8 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.fetch('energy')).to include('yesterday_kwh' => 15.8, 'trend' => 'down')
     expect(result.fetch('heat')).to include('yesterday_kwh' => 50, 'trend' => 'down')
     html = document(render('full', 'de'))
-    expect(html.css('.vp-yesterday').map(&:text)).to include('Gestern: 15,8 kWh ↓', 'Gestern: 50 kWh ↓')
+    expect(html.css('.vp-yesterday').map(&:text)).to include('Gestern15,8 kWh', 'Gestern50 kWh')
+    expect(html.css('.vp-day-comparison').first.element_children.map { |node| node['class'] }).to eq(%w[vp-yesterday vp-comparison-arrow vp-today])
     expect(html.css('.vp-trend').map { |node| node['aria-label'] }).to all(eq('Heute niedriger als gestern'))
   end
 
@@ -553,7 +554,7 @@ RSpec.describe 'Viessmann heat pump' do
     item = feature('heating.power.consumption.summary.total')
     item['properties']['day']['value'] = [12.34]
     expect(transform.fetch('energy')).to include('yesterday_kwh' => nil, 'trend' => nil)
-    expect(document(render).css('.vp-yesterday').first.text).to eq('Yesterday: —')
+    expect(document(render).css('.vp-yesterday').first.text).to eq('Yesterday—')
     item['properties']['day']['value'] = [12.34, 20]
     item['properties']['dayValueReadAt'] = { 'value' => '2026-10-17T18:00:00Z' }
     expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
