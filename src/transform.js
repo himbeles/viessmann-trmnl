@@ -468,6 +468,42 @@ function run(input) {
       metrics.today_outdated = outdatedEnergy;
     }
 
+    // Historical day[1] is yesterday's completed local day, not a rolling 24 h.
+    // Only use an array anchored to today; an old day[0] can be a partial day.
+    const history = names => {
+      for (const name of names) {
+        const item = rawFeature(name);
+        if (!Array.isArray(item?.properties?.day?.value)) continue;
+        const timestamp = Date.parse(item.properties.dayValueReadAt?.value ?? item.timestamp);
+        if (today == null || calendarDate(timestamp) !== today) continue;
+        const amount = convert({ ...item.properties.day, value: item.properties.day.value[1] }, 'energy');
+        if (amount != null) return amount;
+      }
+      return null;
+    };
+    const deviceHistory = () => history([`heating.${base}.total`, `heating.${base}.summary.total`, `heating.${base}.summary`]);
+    const useHistory = scope => history([`heating.${base}.${scope}`, `heating.${base}.summary.${scope}`]);
+    const combinedHistory = scopes => {
+      const amounts = scopes.map(useHistory);
+      return amounts.every(amount => amount != null) ? amounts.reduce((sum, amount) => sum + amount, 0) : null;
+    };
+    let yesterday = null;
+    if (dailyFeature) yesterday = history([dailyFeature, dailyFeature.replace('.summary.', '.')]);
+    else if (metrics.today_scope === 'heating_dhw') yesterday = combinedHistory(['heating', 'dhw']);
+    else if (metrics.today_scope === 'heating_dhw_cooling') yesterday = combinedHistory(['heating', 'dhw', 'cooling']);
+    else {
+      yesterday = deviceHistory();
+      // With no current counter, yesterday can still be shown, without an arrow.
+      if (yesterday == null && metrics.today_kwh == null) {
+        const scopes = ['heating', 'dhw'];
+        if (base === 'power.consumption' && [`heating.${base}.cooling`, `heating.${base}.summary.cooling`].some(name => rawFeature(name))) scopes.push('cooling');
+        yesterday = combinedHistory(scopes);
+      }
+    }
+    metrics.yesterday_kwh = yesterday == null ? null : Math.round(yesterday * 1000) / 1000;
+    metrics.trend = metrics.today_kwh == null || metrics.yesterday_kwh == null ? null
+      : metrics.today_kwh > metrics.yesterday_kwh ? 'up' : metrics.today_kwh < metrics.yesterday_kwh ? 'down' : 'flat';
+
     return metrics;
   };
   result.energy = readEnergy('power.consumption', settings.current_power_feature, settings.daily_energy_feature);
@@ -548,21 +584,21 @@ function run(input) {
     const plotted = points.map(point => ({
       outdoor: point.outdoor, supply: round(point.supply),
       x: round(48 + (point.outdoor - minX) / (maxX - minX) * 386),
-      y: round(156 - (point.supply - minY) / (maxY - minY) * 132),
+      y: round(216 - (point.supply - minY) / (maxY - minY) * 192),
       label: reference || point.outdoor % 10 === 0
     }));
     const marker = temperature => outdoor == null || temperature == null ? null : {
       x: round(48 + (outdoor - minX) / (maxX - minX) * 386),
-      y: round(156 - (temperature - minY) / (maxY - minY) * 132)
+      y: round(216 - (temperature - minY) / (maxY - minY) * 192)
     };
     result.curve = {
       target: marker(target),
       reference, room_setpoint: curveRoom, max_supply: !reference && limitsValid ? maxSupply : null, max_from_api: apiMax != null,
-      cap_y: !reference && maxSupply != null && limitsValid ? round(156 - (maxSupply - minY) / (maxY - minY) * 132) : null,
+      cap_y: !reference && maxSupply != null && limitsValid ? round(216 - (maxSupply - minY) / (maxY - minY) * 192) : null,
       invalid_reference: Boolean(settings.curve_points) && !reference,
       points: plotted, step_points: plotted.filter(point => point.outdoor % 10 === 0), polyline: plotted.map(point => `${point.x},${point.y}`).join(' '),
       ticks: Array.from({ length: 5 }, (_, index) => ({
-        value: round(minY + index * (maxY - minY) / 4), y: 156 - index * 33
+        value: round(minY + index * (maxY - minY) / 4), y: 216 - index * 48
       })),
       x_ticks: Array.from({ length: 6 }, (_, index) => ({ value: round(minX + index * (maxX - minX) / 5), x: 48 + index * 77.2 }))
     };

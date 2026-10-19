@@ -529,6 +529,71 @@ RSpec.describe 'Viessmann heat pump' do
     expect(output).not_to match(/commands|SYNTHETIC_TOKEN_MUST_NOT_LEAK|unrelated/)
   end
 
+  it "compares today's running totals with yesterday's completed day, separately for electricity and heat" do
+    result = transform
+    expect(result.fetch('energy')).to include('yesterday_kwh' => 15.8, 'trend' => 'down')
+    expect(result.fetch('heat')).to include('yesterday_kwh' => 50, 'trend' => 'down')
+    html = document(render('full', 'de'))
+    expect(html.css('.vp-yesterday').map(&:text)).to include('Gestern: 15,8 kWh ↓', 'Gestern: 50 kWh ↓')
+    expect(html.css('.vp-trend').map { |node| node['aria-label'] }).to all(eq('Heute niedriger als gestern'))
+  end
+
+  it 'keeps yesterday zero and distinguishes rising, falling and unchanged totals' do
+    counter = feature('heating.power.consumption.summary.total')['properties']
+    counter['currentDay']['value'] = 0
+    counter['day']['value'] = [0, 0]
+    expect(transform.fetch('energy')).to include('yesterday_kwh' => 0, 'trend' => 'flat')
+    counter['currentDay']['value'] = 2
+    expect(transform.dig('energy', 'trend')).to eq('up')
+    counter['day']['value'][1] = 3
+    expect(transform.dig('energy', 'trend')).to eq('down')
+  end
+
+  it 'does not manufacture a comparison from missing, invalid or old historical bins' do
+    item = feature('heating.power.consumption.summary.total')
+    item['properties']['day']['value'] = [12.34]
+    expect(transform.fetch('energy')).to include('yesterday_kwh' => nil, 'trend' => nil)
+    expect(document(render).css('.vp-yesterday').first.text).to eq('Yesterday: —')
+    item['properties']['day']['value'] = [12.34, 20]
+    item['properties']['dayValueReadAt'] = { 'value' => '2026-10-17T18:00:00Z' }
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+    item['properties'].delete('dayValueReadAt')
+    item['properties']['day']['unit'] = 'kW'
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+    item['properties']['day']['unit'] = 'kWh'
+    item['timestamp'] = '2026-10-17T18:00:00Z'
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+  end
+
+  it 'sums historical heating and hot water bins with the same cooling scope as today' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.heating', 'day', [3000, 5000], 'Wh')
+    data['data'] << reading('heating.power.consumption.dhw', 'day', [1, 2])
+    data['data'] << reading('heating.power.consumption.cooling', 'day', [1, 3])
+    data['data'] << reading('heating.heat.production.heating', 'day', [12, 20])
+    data['data'] << reading('heating.heat.production.dhw', 'day', [5, 8])
+    data['data'] << reading('heating.heat.production.cooling', 'day', [9, 99])
+    result = transform
+    expect(result.fetch('energy')).to include('today_kwh' => 5, 'yesterday_kwh' => 10, 'trend' => 'down')
+    expect(result.fetch('heat')).to include('today_kwh' => 17, 'yesterday_kwh' => 28, 'trend' => 'down')
+    feature('heating.power.consumption.dhw')['properties']['day']['value'] = [1]
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+  end
+
+  it 'does not compare a device total against an incomplete historical use breakdown' do
+    feature('heating.power.consumption.summary.total')['properties'].delete('day')
+    data['data'] << reading('heating.power.consumption.heating', 'day', [8, 20])
+    data['data'] << reading('heating.power.consumption.dhw', 'day', [4.34, 10])
+    expect(transform.fetch('energy')).to include('today_kwh' => 12.34, 'yesterday_kwh' => nil, 'trend' => nil)
+  end
+
+  it 'uses calendar-day bins through a DST transition in the configured time zone' do
+    item = feature('heating.power.consumption.summary.total')
+    item['timestamp'] = '2026-10-25T23:45:00Z' # October 26 in Berlin, after the 25-hour day.
+    expect(transform({ time_zone: 'Europe/Berlin' }, at: '2026-10-26T00:00:00Z').fetch('energy')).to include('yesterday_kwh' => 15.8)
+    expect(transform({ time_zone: 'America/New_York' }, at: '2026-10-26T06:00:00Z').dig('energy', 'yesterday_kwh')).to be_nil
+  end
+
   it 'keeps electrical consumption and thermal production independent' do
     result = transform
     expect(result.fetch('energy')).to include('power_kw' => 1.8, 'today_kwh' => 12.34, 'power_scope' => 'compressor')
