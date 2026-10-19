@@ -48,8 +48,12 @@ function run(input) {
   fields.set(circuitSupply, ['value', 'status']);
   fields.set(`${prefix}.circulation.pump`, ['status']);
   fields.set('heating.dhw.charging', ['active', 'status']);
-  const componentNames = features.map(item => item?.feature).filter(name => typeof name === 'string' && (/^heating\.compressors\.\d+$/.test(name) || /^heating\.primaryCircuit\.fans\.\d+\.current$/.test(name) || name === 'heating.heatingRod'));
+  const componentNames = features.map(item => item?.feature).filter(name => typeof name === 'string' && (/^heating\.compressors\.\d+$/.test(name) || /^heating\.primaryCircuit\.fans\.\d+\.current$/.test(name)));
   for (const name of componentNames) fields.set(name, ['active', 'value', 'status']);
+  const auxiliaryStatus = 'heating.heatingRod.status';
+  const auxiliaryPower = 'heating.heatingRod.power.consumption.current';
+  fields.set(auxiliaryStatus, ['overall', 'level1', 'level2', 'level3', 'status']);
+  fields.set(auxiliaryPower, ['value', 'status']);
   fields.set('heating.dhw.sensors.temperature.tankLoadSystem.supply', ['value', 'status']);
   fields.set('heating.dhw.sensors.temperature.tankLoadSystem.return', ['value', 'status']);
   fields.set('heating.secondaryCircuit.operation.state', ['currentValue', 'status']);
@@ -76,9 +80,9 @@ function run(input) {
     const properties = {};
     for (const key of keys) {
       const raw = feature.properties?.[key]?.value;
-      properties[key] = { value: key === 'active' ? (typeof raw === 'boolean' ? raw : null)
+      properties[key] = { value: ['active', 'overall', 'level1', 'level2', 'level3'].includes(key) ? (typeof raw === 'boolean' ? raw : null)
         : key === 'status' || key === 'currentValue' || mode ? text(raw, null, 128) : numeric(raw) };
-      if (name === 'heating.sensors.pressure.supply' && key === 'value') {
+      if ([auxiliaryPower, 'heating.sensors.pressure.supply'].includes(name) && key === 'value') {
         properties[key].unit = text(feature.properties?.[key]?.unit, null, 32);
       }
     }
@@ -127,9 +131,18 @@ function run(input) {
     }
     return item.properties.active?.value ?? null;
   };
+  // heating.heatingRod.active means available, not currently drawing power.
+  // The status feature reports the actual instantaneous e-heater stages.
+  const auxiliary = valid(auxiliaryStatus)?.properties;
+  const overall = auxiliary?.overall?.value;
+  const stageState = aggregateStates(['level1', 'level2', 'level3'].map(key => auxiliary?.[key]?.value ?? null));
+  const draw = valid(auxiliaryPower)?.properties?.value;
+  const drawValid = draw?.value != null && draw.value >= 0 && ['W', 'watt', 'kW', 'kilowatt'].includes(draw.unit);
+  const auxiliaryState = typeof overall === 'boolean' ? (overall ? 'on' : 'off')
+    : stageState !== 'unknown' ? stageState : drawValid ? (draw.value > 0 ? 'on' : 'off') : 'unknown';
   result.components = {
     compressor: aggregateStates(componentNames.filter(name => /^heating\.compressors\.\d+$/.test(name)).map(componentState)),
-    auxiliary: aggregateStates(componentNames.filter(name => name === 'heating.heatingRod').map(componentState)),
+    auxiliary: auxiliaryState,
     fan: aggregateStates(componentNames.filter(name => name.includes('.fans.')).map(componentState))
   };
 
@@ -475,6 +488,7 @@ function run(input) {
 
   if (result.pressure.bar != null) rememberTime(pressureTime);
   for (const name of componentNames) if (componentState(name) != null) rememberTime(Date.parse(valid(name)?.timestamp));
+  if (auxiliaryState !== 'unknown') rememberTime(Date.parse(valid(typeof overall === 'boolean' || stageState !== 'unknown' ? auxiliaryStatus : auxiliaryPower)?.timestamp));
   result.freshness.latest_reading = displayTimes.length ? formatTime(Math.max(...displayTimes)) : null;
 
   // E3 curve calculation used by PyViCare, with live circuit limits.

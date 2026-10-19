@@ -39,7 +39,7 @@ RSpec.describe 'Viessmann heat pump' do
         data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 30.2 } } }
         data['data'] << { 'feature' => 'heating.circuits.0.temperature', 'properties' => { 'value' => { 'value' => 32.4 } } }
         data['data'] << reading('heating.compressors.0', 'active', true)
-        data['data'] << reading('heating.heatingRod', 'active', false)
+        data['data'] << reading('heating.heatingRod.status', 'overall', false)
         data['data'] << reading('heating.primaryCircuit.fans.0.current', 'value', 45, 'percent')
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
@@ -89,15 +89,59 @@ RSpec.describe 'Viessmann heat pump' do
     expect(html.at_css('.vp-metrics').text).to include('—')
   end
 
-  it 'reads actual compressor and auxiliary activity, including false, without using approval settings' do
+  it 'reads actual compressor and auxiliary activity, including false, without using availability or approval settings' do
     data['data'] << reading('heating.compressors.0', 'active', true)
-    data['data'] << reading('heating.heatingRod', 'active', false)
+    data['data'] << reading('heating.heatingRod.status', 'overall', false)
+    data['data'] << reading('heating.heatingRod', 'active', true)
     data['data'] << reading('heating.configuration.heatingRod.heating', 'useApproved', true)
     expect(transform.fetch('components')).to include('compressor' => 'on', 'auxiliary' => 'off', 'fan' => 'unknown')
     html = document(render('full', 'de'))
     expect(html.at_css('[data-component="compressor"] .vp-component-state').text).to eq('Ein')
     expect(html.at_css('[data-component="auxiliary"] .vp-component-state').text).to eq('Aus')
     expect(html.at_css('[data-component="fan"] .vp-component-state').text).to eq('—')
+  end
+
+  it 'never treats heater availability as running and reads the actual overall state' do
+    data['data'] << reading('heating.heatingRod', 'active', true)
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
+    status = reading('heating.heatingRod.status', 'overall', false)
+    data['data'] << status
+    expect(transform.dig('components', 'auxiliary')).to eq('off')
+    status['properties']['overall']['value'] = true
+    expect(transform.dig('components', 'auxiliary')).to eq('on')
+    status['isEnabled'] = false
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
+  end
+
+  it 'uses actual heater stages when overall status is absent, preserving unknown stages' do
+    status = reading('heating.heatingRod.status', 'level1', false)
+    status['properties']['level2'] = { 'value' => false }
+    status['properties']['level3'] = { 'value' => false }
+    data['data'] << status
+    expect(transform.dig('components', 'auxiliary')).to eq('off')
+    status['properties']['level2']['value'] = true
+    expect(transform.dig('components', 'auxiliary')).to eq('on')
+    status['properties']['level2']['value'] = false
+    status['properties'].delete('level3')
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
+  end
+
+  it 'uses measured heater electrical draw only when stage status is unavailable' do
+    data['data'] << reading('heating.heatingRod', 'active', true)
+    power = reading('heating.heatingRod.power.consumption.current', 'value', 0, 'W')
+    data['data'] << power
+    expect(transform.dig('components', 'auxiliary')).to eq('off')
+    power['properties']['value']['value'] = 3
+    power['properties']['value']['unit'] = 'kW'
+    expect(transform.dig('components', 'auxiliary')).to eq('on')
+    data['data'] << reading('heating.heatingRod.status', 'overall', false)
+    expect(transform.dig('components', 'auxiliary')).to eq('off')
+    data['data'].reject! { |item| item['feature'] == 'heating.heatingRod.status' }
+    power['properties']['value']['unit'] = 'kWh'
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
+    power['properties']['value']['unit'] = 'W'
+    power['isEnabled'] = false
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
   end
 
   it 'aggregates fan speed and avoids treating unavailable or disabled fans as off' do
