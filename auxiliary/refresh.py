@@ -69,6 +69,8 @@ def main():
             'return_scope': variables.get('return_reading', {}).get('scope'),
             'latest_reading': variables.get('freshness', {}).get('latest_reading'),
             'electricity_by_use': variables.get('energy', {}).get('by_use'),
+            'electricity_total_features': variables.get('energy', {}).get('today_features'),
+            'electricity_counters': variables.get('energy', {}).get('counter_readings'),
             'supply_scope': variables.get('supply_scope'),
             'supply_temperature_c': variables.get('supply_reading', {}).get('value'),
             'supply_target_c': variables.get('setpoints', {}).get('supply'),
