@@ -596,6 +596,61 @@ RSpec.describe 'Viessmann heat pump' do
     expect(transform({ time_zone: 'America/New_York' }, at: '2026-10-26T06:00:00Z').dig('energy', 'yesterday_kwh')).to be_nil
   end
 
+  it 'marks old dayValueReadAt even when the feature timestamp is fresh' do
+    item = feature('heating.power.consumption.summary.total')
+    item['properties']['dayValueReadAt'] = { 'value' => '2026-10-18T10:00:00Z' }
+    result = transform
+    expect(result.dig('energy', 'day_read_time')).to include('stale' => true, 'at' => '18.10.2026, 12:00')
+    expect(result.dig('energy', 'today_kwh')).to eq(12.34)
+    %w[en de].each do |language|
+      html = document(render('full', language))
+      expect(html.css('.vp-read-age').size).to eq(1)
+      expect(html.at_css('.vp-read-age').text.strip).to eq(language == 'de' ? 'Stand: 18.10.2026, 12:00' : 'As of: 18.10.2026, 12:00')
+      expect(html.at_css('.vp-read-age [data-glyph="clock"]')).not_to be_nil
+      expect(html.css('.vp-water-block .vp-read-age, .vp-power-block .vp-read-age')).to be_empty
+    end
+  end
+
+  it 'does not mark feature timestamps without an explicit valid dayValueReadAt' do
+    item = feature('heating.power.consumption.summary.total')
+    item['timestamp'] = '2026-10-18T10:00:00Z'
+    expect(transform.dig('energy', 'day_read_time')).to be_nil
+    expect(document(render).css('.vp-read-age')).to be_empty
+    item['properties']['dayValueReadAt'] = { 'value' => 'invalid' }
+    expect(transform.dig('energy', 'day_read_time')).to be_nil
+    expect(document(render).css('.vp-read-age')).to be_empty
+    item['properties']['dayValueReadAt']['value'] = '2026-10-18T18:05:00Z'
+    expect(transform.dig('energy', 'day_read_time', 'stale')).to be(false)
+    expect(document(render).css('.vp-read-age')).to be_empty
+  end
+
+  it 'uses the oldest explicit component day read time for summed daily totals' do
+    remove_energy_totals
+    heating = reading('heating.power.consumption.heating', 'day', [3, 5])
+    heating['properties']['dayValueReadAt'] = { 'value' => '2026-10-18T10:00:00Z' }
+    water = reading('heating.power.consumption.dhw', 'day', [1, 2])
+    water['properties']['dayValueReadAt'] = { 'value' => '2026-10-18T18:00:00Z' }
+    data['data'].concat([heating, water])
+    result = transform
+    expect(result.dig('energy', 'day_read_time')).to include('stale' => true, 'at' => '18.10.2026, 12:00')
+    expect(result.dig('energy', 'by_use', 'heating', 'day_read_time', 'stale')).to be(true)
+    expect(result.dig('energy', 'by_use', 'dhw', 'day_read_time', 'stale')).to be(false)
+    expect(document(render).css('.vp-read-age').size).to eq(2)
+    water['properties'].delete('dayValueReadAt')
+    expect(transform.dig('energy', 'day_read_time', 'stale')).to be(true)
+    heating['properties'].delete('dayValueReadAt')
+    expect(transform.dig('energy', 'day_read_time')).to be_nil
+  end
+
+  it 'uses the configurable stale threshold and never flags a future read time' do
+    item = feature('heating.power.consumption.summary.total')
+    item['properties']['dayValueReadAt'] = { 'value' => '2026-10-18T17:30:00Z' }
+    expect(transform.dig('energy', 'day_read_time', 'stale')).to be(false)
+    expect(transform(stale_minutes: '30').dig('energy', 'day_read_time', 'stale')).to be(true)
+    item['properties']['dayValueReadAt']['value'] = '2026-10-18T19:00:00Z'
+    expect(transform(stale_minutes: '30').dig('energy', 'day_read_time', 'stale')).to be(false)
+  end
+
   it 'keeps electrical consumption and thermal production independent' do
     result = transform
     expect(result.fetch('energy')).to include('power_kw' => 1.8, 'today_kwh' => 12.34, 'power_scope' => 'compressor')

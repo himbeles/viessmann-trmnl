@@ -405,7 +405,7 @@ function run(input) {
         outdatedEnergy = true;
         return null;
       }
-      return { amount, timestamp, feature: name };
+      return { amount, timestamp, feature: name, day_read_at: Date.parse(item.properties?.dayValueReadAt?.value) };
     };
     const firstDay = names => {
       for (const name of names) {
@@ -414,6 +414,14 @@ function run(input) {
       }
       return null;
     };
+    // Only the explicit day-counter read time can create a visible age marker.
+    // General feature timestamps and missing/invalid read times never do.
+    const dayReadTime = readings => {
+      const times = readings.map(reading => reading.day_read_at).filter(Number.isFinite);
+      if (!times.length) return null;
+      const timestamp = Math.min(...times);
+      return { at: formatTime(timestamp), stale: now > 0 && now - timestamp > settings.stale_minutes * 60000 };
+    };
     // Read both uses even when a separate whole-device total is available.
     metrics.by_use = {};
     for (const scope of ['heating', 'dhw']) {
@@ -421,7 +429,7 @@ function run(input) {
       if (reading) {
         rememberTime(reading.timestamp);
         metrics.by_use[scope] = { today_kwh: Math.round(reading.amount * 1000) / 1000,
-          stale: now - reading.timestamp > settings.stale_minutes * 60000 };
+          stale: now - reading.timestamp > settings.stale_minutes * 60000, day_read_time: dayReadTime([reading]) };
       }
     }
     let daily;
@@ -458,6 +466,7 @@ function run(input) {
       metrics.today_scope = dailyScope;
       metrics.today_features = daily.components ? daily.components.map(item => item.feature) : [daily.feature];
       metrics.today_updated = formatTime(daily.timestamp);
+      metrics.day_read_time = dayReadTime(daily.components || [daily]);
       metrics.today_stale = now - daily.timestamp > settings.stale_minutes * 60000;
       if (daily.components) {
         metrics.today_components = daily.components.map(item => ({

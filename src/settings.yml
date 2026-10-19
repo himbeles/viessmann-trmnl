@@ -56,7 +56,8 @@ custom_fields:
     default: heating.sensors.temperature.outside
     optional: true
   - keyname: stale_minutes
-    name: Mark readings stale after (minutes)
+    name: Daily-counter read-time warning (minutes)
+    description: Shows an age marker only when dayValueReadAt exceeds this threshold.
     field_type: string
     default: "120"
     optional: true
