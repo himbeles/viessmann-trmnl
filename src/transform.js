@@ -48,6 +48,8 @@ function run(input) {
   fields.set(circuitSupply, ['value', 'status']);
   fields.set(`${prefix}.circulation.pump`, ['status']);
   fields.set('heating.dhw.charging', ['active', 'status']);
+  const componentNames = features.map(item => item?.feature).filter(name => typeof name === 'string' && (/^heating\.compressors\.\d+$/.test(name) || /^heating\.primaryCircuit\.fans\.\d+\.current$/.test(name) || name === 'heating.heatingRod'));
+  for (const name of componentNames) fields.set(name, ['active', 'value', 'status']);
   fields.set('heating.dhw.sensors.temperature.tankLoadSystem.supply', ['value', 'status']);
   fields.set('heating.dhw.sensors.temperature.tankLoadSystem.return', ['value', 'status']);
   fields.set('heating.secondaryCircuit.operation.state', ['currentValue', 'status']);
@@ -113,6 +115,24 @@ function run(input) {
   else if (operation == null && pumpStatus === 'on' && charging === false) activity = 'heating';
   else if (operation == null && pumpStatus === 'off' && charging === false) activity = 'off';
   result.activity = { state: activity };
+  // Activity is distinct from permission to run or accumulated power counters.
+  const aggregateStates = states => states.includes(true) ? 'on'
+    : states.length && states.every(state => state === false) ? 'off' : 'unknown';
+  const componentState = name => {
+    const item = valid(name);
+    if (!item) return null;
+    if (name.includes('.fans.')) {
+      const speed = item.properties.value?.value;
+      return speed != null && speed >= 0 ? speed > 0 : null;
+    }
+    return item.properties.active?.value ?? null;
+  };
+  result.components = {
+    compressor: aggregateStates(componentNames.filter(name => /^heating\.compressors\.\d+$/.test(name)).map(componentState)),
+    auxiliary: aggregateStates(componentNames.filter(name => name === 'heating.heatingRod').map(componentState)),
+    fan: aggregateStates(componentNames.filter(name => name.includes('.fans.')).map(componentState))
+  };
+
   const heatingActive = activity === 'heating' && pumpStatus === 'on';
   const dhwActive = activity === 'dhw';
   const dhwSupply = 'heating.dhw.sensors.temperature.tankLoadSystem.supply';
@@ -454,6 +474,7 @@ function run(input) {
   };
 
   if (result.pressure.bar != null) rememberTime(pressureTime);
+  for (const name of componentNames) if (componentState(name) != null) rememberTime(Date.parse(valid(name)?.timestamp));
   result.freshness.latest_reading = displayTimes.length ? formatTime(Math.max(...displayTimes)) : null;
 
   // E3 curve calculation used by PyViCare, with live circuit limits.

@@ -38,6 +38,9 @@ RSpec.describe 'Viessmann heat pump' do
         data['data'] << reading('heating.heat.production.summary.dhw', 'currentDay', 13.6)
         data['data'] << { 'feature' => 'heating.circuits.0.sensors.temperature.supply', 'properties' => { 'value' => { 'value' => 30.2 } } }
         data['data'] << { 'feature' => 'heating.circuits.0.temperature', 'properties' => { 'value' => { 'value' => 32.4 } } }
+        data['data'] << reading('heating.compressors.0', 'active', true)
+        data['data'] << reading('heating.heatingRod', 'active', false)
+        data['data'] << reading('heating.primaryCircuit.fans.0.current', 'value', 45, 'percent')
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
         html = document(screen)
@@ -46,13 +49,13 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-activity').text).to eq(language == 'de' ? 'Heizung' : 'Heating')
         expect(html.at_css('.vp').text).not_to match(/\b(?:CEST|CET|MESZ|MEZ|UTC|GMT)\b/)
         expect(html.at_css('.vp-curve-readings').text).to include(language == 'de' ? '32,4' : '32.4')
-        expect(html.css('.vp-blocks > section').size).to eq(3)
+        expect(html.css('.vp-blocks > section').size).to eq(4)
         expect(html.at_css('.vp-water-block .vp-water').text).to include(language == 'de' ? '48,2' : '48.2')
         expect(html.at_css('.vp-heating-block > .vp-metrics .vp-pressure').text).to include(language == 'de' ? '1,8' : '1.8')
         expect(html.at_css('.vp-supply-readings > .vp-supply-target .vp-full-label').text).to eq(language == 'de' ? 'Soll' : 'Target')
         expect(html.at_css('.vp-heating-block svg')).not_to be_nil
         expect(html.at_css('.vp-energy-block .vp-energy')).not_to be_nil
-        expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Gesamt' : 'Total')
+        expect(html.at_css('.vp-energy-block .vp-block-title').text).to eq(language == 'de' ? 'Verbrauch heute' : 'Usage today')
         expect(html.css('.vp-supply-marker, .vp-return-marker, .vp-measured-guide')).to be_empty
         expect(html.at_css('.vp-target-marker')).not_to be_nil
         expect(html.css('.vp-curve-step').size).to eq(6)
@@ -65,12 +68,14 @@ RSpec.describe 'Viessmann heat pump' do
         expect(html.at_css('.vp-water-block .vp-use-energy').text).to include(language == 'de' ? '4,34' : '4.34')
         expect(html.at_css('.vp-heating-block .vp-use-energy').text).to include('8 kWh', '35 kWh')
         expect(html.css('.vp-water-flows')).to be_empty
-        expect(html.css('.vp-glyph').map { |glyph| glyph['data-glyph'] }).to contain_exactly('heating', 'water', 'pressure')
+        expect(html.css('.vp-glyph').map { |glyph| glyph['data-glyph'] }).to contain_exactly('heating', 'water', 'pressure', 'compressor', 'auxiliary', 'fan')
         expect(html.at_css('.vp-footer').text).to include('18.10.2026, 20:00')
         expect(html.at_css('.vp-footer').text).not_to match(/TRMNL|Read only|Nur Anzeige/)
         expect(html.at_css('.vp-blocks').text).not_to match(/18[.]10[.]2026/)
         expect(html.css('.vp-mode')).to be_empty
-        expect(html.at_css('.vp-energy').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '12.34'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
+        expect(html.at_css('.vp-energy').text).to include('12.34'.tr('.', language == 'de' ? ',' : '.'), '48.6'.tr('.', language == 'de' ? ',' : '.'))
+        expect(html.at_css('.vp-power').text).to include('1.8'.tr('.', language == 'de' ? ',' : '.'), '7.2'.tr('.', language == 'de' ? ',' : '.'))
+        expect(html.at_css('.vp-energy').text).not_to match(/\bkW\b/)
         expect(html.at_css('.vp')['class'].include?('vp-compact')).to eq(view != 'full')
         expect(html.at_css('.vp')['class'].include?('vp-small')).to eq(%w[half_vertical quadrant].include?(view))
       end
@@ -82,6 +87,43 @@ RSpec.describe 'Viessmann heat pump' do
     expect(html.at_css('.vp-badge').text).to include('Not connected')
     expect(html.css('polyline')).to be_empty
     expect(html.at_css('.vp-metrics').text).to include('—')
+  end
+
+  it 'reads actual compressor and auxiliary activity, including false, without using approval settings' do
+    data['data'] << reading('heating.compressors.0', 'active', true)
+    data['data'] << reading('heating.heatingRod', 'active', false)
+    data['data'] << reading('heating.configuration.heatingRod.heating', 'useApproved', true)
+    expect(transform.fetch('components')).to include('compressor' => 'on', 'auxiliary' => 'off', 'fan' => 'unknown')
+    html = document(render('full', 'de'))
+    expect(html.at_css('[data-component="compressor"] .vp-component-state').text).to eq('Ein')
+    expect(html.at_css('[data-component="auxiliary"] .vp-component-state').text).to eq('Aus')
+    expect(html.at_css('[data-component="fan"] .vp-component-state').text).to eq('—')
+  end
+
+  it 'aggregates fan speed and avoids treating unavailable or disabled fans as off' do
+    fan0 = reading('heating.primaryCircuit.fans.0.current', 'value', 0)
+    fan1 = reading('heating.primaryCircuit.fans.1.current', 'value', 35)
+    data['data'].concat([fan0, fan1])
+    expect(transform.dig('components', 'fan')).to eq('on')
+    fan1['properties']['value']['value'] = 0
+    expect(transform.dig('components', 'fan')).to eq('off')
+    fan1['isEnabled'] = false
+    expect(transform.dig('components', 'fan')).to eq('unknown')
+    fan1['isEnabled'] = true
+    fan1['properties']['status'] = { 'value' => 'disconnected' }
+    expect(transform.dig('components', 'fan')).to eq('unknown')
+    fan0['properties']['value']['value'] = 10
+    expect(transform.dig('components', 'fan')).to eq('on')
+  end
+
+  it 'does not interpret missing, disabled or malformed component activation as off' do
+    compressor = reading('heating.compressors.0', 'active', 'false')
+    data['data'] << compressor
+    expect(transform.dig('components', 'compressor')).to eq('unknown')
+    compressor['properties']['active']['value'] = true
+    compressor['isEnabled'] = false
+    expect(transform.dig('components', 'compressor')).to eq('unknown')
+    expect(transform.dig('components', 'auxiliary')).to eq('unknown')
   end
 
   it 'does not infer activity from the selected operating mode or an isolated pump status' do
@@ -620,7 +662,7 @@ RSpec.describe 'Viessmann heat pump' do
         combined_heat
         screen = render(view, language)
         expect(screen).to have_no_transform_error.and(have_no_leaked_text)
-        heat_tile = document(screen).css('.vp-energy > div')[3]
+        heat_tile = document(screen).css('.vp-energy > div')[1]
         note = heat_tile.at_css('.vp-energy-note').text.gsub(/\s+/, ' ').strip
         expect(document(screen).at_css('.vp').text).not_to match(/Stale data|Daten veraltet/)
         expect(note).to include(language == 'de' ? 'Gesamtes Gerät' : 'Whole device')
