@@ -1,222 +1,81 @@
-# Viessmann heat pump for TRMNL X
+# Viessmann heat pump for TRMNL
 
-A read-only heat-pump dashboard with hot-water and outdoor temperatures, room and heating targets, an active-circuit badge, water pressure, a capped heating curve with a target marker and supply/return readings beside it, electrical consumption and thermal heat output. English is the default; select **Deutsch** for German labels and numbers. Dates follow the configured time zone’s regional format.
+A read-only dashboard for a ViCare-connected heat pump, designed for TRMNL X and available in all four TRMNL layouts. It shows heating and hot-water temperatures, a heating curve, component status, electrical consumption, and heat output. English is the default; German is available.
 
-This project starts from the [official `trmnlp init` scaffold](https://github.com/usetrmnl/trmnlp). All four layouts render the same shared dashboard. There is no layout generator, custom preview server, JavaScript build step or deployment wrapper.
+## Requirements
 
-## Project structure
+- A TRMNL account with access to private plugins, and a TRMNL device or BYOD display.
+- A heat pump connected to your ViCare account.
+- A [Viessmann developer application](https://developer.viessmann-climatesolutions.com/start.html) for OAuth authentication.
+- [trmnlp](https://github.com/usetrmnl/trmnlp#readme) to publish the plugin, or the configured GitHub Actions workflow to update it.
 
-```text
-.github/workflows/trmnl.yml  # Workflow supplied by trmnlp init
-.trmnlp.yml                  # Local preview configuration and synthetic data
-.gitignore
-bin/trmnlp                  # Official launcher, pinned to v0.31.1
-src/
-  settings.yml              # Hosted plugin definition; existing target 510867
-  shared.liquid             # Shared dashboard, styles and translations
-  full.liquid               # Full-screen view
-  half_horizontal.liquid    # Horizontal mashup view
-  half_vertical.liquid      # Vertical mashup view
-  quadrant.liquid           # Quarter-screen view
-  transform.js              # Viessmann-specific Serverless data reduction and calculation
-tests/
-  plugin_spec.rb            # Native trmnlp/RSpec transform and layout tests
-auxiliary/                  # API debugging tools and implementation documentation
-```
+Available readings depend on the heat pump and the API access granted to your account.
 
-The published plugin consists only of `src/`. `.trmnlp.yml`, synthetic preview data, tests and auxiliary tools are never uploaded by `trmnlp push`.
+## Required parameters
 
-## Local preview
-
-Install [Docker](https://docs.docker.com/get-docker/), or Ruby 4.0+ and `gem install trmnl_preview --version 0.31.1`. The Node Serverless transform also needs Node 24 when using the gem; the official Docker image includes it.
-
-From the repository directory:
-
-```sh
-./bin/trmnlp serve
-```
-
-Open **http://localhost:4567**. The standard trmnlp interface provides live reloading, device selection, mashup layouts, data inspection and screenshots. Select TRMNL X / v2 for the intended full-screen size. Change `custom_fields.language` in `.trmnlp.yml` to `de` to preview German.
-
-The checked-in `.trmnlp.yml` disables network polling locally with an empty polling URL override and supplies a clearly labelled synthetic fixture. The fixture's timestamps are from **2026-10-18**; older sample energy counters correctly become unavailable on later dates. The hosted plugin continues to use live Polling and its saved configuration.
-
-For Podman, run the official image directly; the upstream launcher checks for Docker or a local gem:
-
-```sh
-podman run --rm -it \
-  -p 127.0.0.1:4567:4567 \
-  -v "$PWD:/plugin" \
-  docker.io/trmnl/trmnlp:v0.31.1 serve --bind 0.0.0.0
-```
-
-Generate HTML or run the native tests:
-
-```sh
-./bin/trmnlp build                 # _build/*.html
-./bin/trmnlp test --report report  # report/index.html and rendered PNGs
-./bin/trmnlp lint
-```
-
-`trmnlp test` uses the official Ruby Liquid engine, Node transform runner, mocked input and frozen clock. Docker includes Firefox and the screenshot tools; gem users should install the [upstream test prerequisites](https://github.com/usetrmnl/trmnlp#installing-via-rubygems). Tests cover all four layouts in English and German, temperatures and targets, nonlinear curves and caps, source/units of electricity and heat, daily rollover, sensor freshness, DST and missing data.
-
-## Publish and update
-
-The existing target is [plugin **510867**](https://trmnl.com/plugin_settings/510867/edit), recorded in `src/settings.yml`. Keep that ID when updating this instance. For another installation, deliberately change the ID, or omit it only for the first push that should create a new plugin.
-
-```sh
-./bin/trmnlp login
-./bin/trmnlp push
-```
-
-The official CLI uploads the source directly. Device identifiers and the Viessmann Client ID/tokens remain in the installed TRMNL instance; do not put them in Git. `src/settings.yml` includes the complete public OAuth configuration and the correct hosted field values:
-
-```yaml
-oauth_enabled: "true"
-oauth_pkce_enabled: "yes"
-polling_headers: "Authorization=Bearer {{ oauth_access_token }}"
-```
-
-These two hosted toggles use different encodings. Keep them as shown when editing the plugin definition. PKCE's hosted `yes` differs from the current Ruby gem's local OAuth `true`; the standard sample preview does not use OAuth.
-
-For a new plugin, the official `push` command handles creation and imports `shared.liquid` and `transform.js` together. If you need a manual import ZIP, use the system archive tool:
-
-```sh
-zip -j viessmann-trmnl.zip src/*
-```
-
-Import that flat ZIP through TRMNL's private-plugin importer. For routine updates, push to the existing ID.
-
-## GitHub updates
-
-The workflow is the one generated by `trmnlp init`, with the gem and container pinned to **0.31.1** and a final plugin-specific polling check:
-
-1. Add the TRMNL **account API key** as the repository Actions secret **`TRMNL_API_KEY`**. It needs profile/read/content access; no Viessmann tokens are needed in GitHub.
-2. Push to `main`. The official workflow lints, runs `trmnlp test` in its Docker image, uploads the test report, and runs `trmnlp push --force` after checks pass.
-3. The final smoke check resets health, requests a real poll and requires nonempty data plus a healthy state. It only checks the saved OAuth settings; it does not rewrite them.
-
-Pull requests run lint and tests without publishing. The scaffold's manual **Run workflow** can update test snapshots; publishing follows its standard push-to-`main` trigger.
-
-## Connect Viessmann
-
-You need a TRMNL account with private-plugin access (Developer edition or BYOD), a ViCare-connected heat pump, and a [Viessmann developer application](https://developer.viessmann-climatesolutions.com/start.html).
-
-1. Open the plugin settings and enter your API **installation ID**, **gateway serial** and **device ID**. These are separate from the OAuth Client ID. The verified heating-device ID for this installation is `0`.
-2. Enter the Viessmann application's Client ID under OAuth settings. For a public PKCE client, leave the Client Secret empty.
-3. Register the exact **OAuth Redirect URL shown by your TRMNL plugin** in the Viessmann application.
-4. Check **Enable OAuth Authentication?** and **Enable PKCE?** are on. The provider configuration is:
-
-   | Setting | Value |
-   |---|---|
-   | Authorization URL | `https://iam.viessmann-climatesolutions.com/idp/v3/authorize` |
-   | Token / refresh URL | `https://iam.viessmann-climatesolutions.com/idp/v3/token` |
-   | Scopes | `IoT User offline_access` |
-   | PKCE | S256 |
-   | Token authentication / body format | body / form |
-
-5. Connect and authorize with Viessmann. Save, then **Force Refresh** and compare the readings with ViCare.
-6. Add the plugin to the device playlist and choose a layout.
-
-The default refresh interval is **15 minutes**, not seconds. The Serverless transform keeps the full Viessmann feature response below TRMNL's 100 KB limit and is uploaded by the official CLI. No additional server is required.
-
-## Configuration fields
-
-| Field | Default | Purpose |
+| Parameter | Where to enter it | What to use |
 |---|---|---|
-| Display language | English (`en`) | Choose English or German (`de`). |
-| Display time zone | `Europe/Berlin` | IANA time zone; daylight-saving time is handled automatically. |
-| API installation ID | Required | Installation identifier from the API inventory. |
-| API gateway serial number | Required | Gateway identifier from the API inventory. |
-| API device ID | `0` | Confirm against the API device list; `0` is the verified heating device for the supplied Vitocal inventory. |
-| Heating circuit | `0` | First API heating circuit; select another index if needed. |
-| API feature: supply temperature | `auto` | Prefer `heating.circuits.N.sensors.temperature.supply`. If unavailable, use the secondary-circuit sensor and label it **Heat pump supply**. A custom feature can override selection. The previous default is treated as `auto` for existing installs. |
-| API feature: hot-water cylinder temperature | `heating.dhw.sensors.temperature.dhwCylinder` | Feature used for the cylinder reading. |
-| API feature: outdoor temperature | `heating.sensors.temperature.outside` | Feature used for the outdoor reading. |
-| Daily-counter read-time warning (minutes) | `120` | Show a clock and read date only for explicit `dayValueReadAt` timestamps older than this threshold. |
-| API feature: supply setpoint | Blank | Optional direct supply-target feature. Otherwise use `heating.circuits.N.temperature`, then the curve if neither is available. |
-| API feature: configured hot-water target | `heating.dhw.temperature.main` | Configured main hot-water target; not necessarily the active scheduled target. |
-| Maximum supply temperature (fallback, °C) | Blank | Used only when the API does not expose the circuit maximum; API values take precedence. |
-| Heating curve reference points | Blank | Optional JSON reference pairs that override the dynamic model. Leave blank for live calculation. |
-| API feature: current electrical power | Auto | Prefer whole-device electrical input, otherwise compressor 0; scope is shown. |
-| API feature: electricity used today | Auto | Prefer device total, otherwise heating + DHW counters, including cooling when present. |
-| API feature: current thermal output | Auto | Prefer whole-device heat output, otherwise compressor 0; scope is shown. |
-| API feature: heat delivered today | Auto | Prefer device heat total, otherwise heating + DHW heat counters. |
+| Viessmann Client ID | TRMNL OAuth settings | The Client ID of your Viessmann developer application. |
+| OAuth Redirect URL | Viessmann developer application | Register the exact redirect URL shown in the TRMNL plugin's OAuth settings. |
+| `installation_id` | Plugin custom fields | Your installation's API ID. |
+| `gateway_serial` | Plugin custom fields | The gateway serial returned by the API. |
+| `device_id` | Plugin custom fields | The heating device's API ID. The default is `0`; verify it against the device list. |
 
-The dashboard groups information into three bordered blocks:
+The installation, gateway, and device IDs are different from the Client ID. A ViCare screen's device number or product serial is not necessarily an API identifier. Use the [API inventory instructions](auxiliary/troubleshooting.md#find-installation-gateway-and-device-ids) to find the correct values.
 
-- **Heating:** outdoor temperature, room target and pressure above the curve; supply target to the right of the graph; small slope/offset details beside the graph heading; daily heating energy figures at the bottom.
-- **Hot water:** cylinder temperature, configured target and daily energy figures with black values and labels for hot water.
-- **Total / Gesamt:** current electrical consumption and thermal output, plus both daily energy counters, source scopes and freshness.
+The standard setup uses a public OAuth client with PKCE and an empty Client Secret. TRMNL manages the access and refresh tokens; you do not enter tokens in the plugin's custom fields.
 
-The heating circuit selects `heating.circuits.N.heating.curve` for slope/offset. The top-right badge shows **Hot water**, **Heating** or **Off** (**Warmwasser**, **Heizung**, **Aus**). Active `heating.dhw.charging.properties.active.value` takes priority. Otherwise the plugin reads `heating.secondaryCircuit.operation.state.properties.currentValue.value`, not `targetValue` or the configured operating mode. `standby`/`off` means off even if circulation continues. When current operation is heating and `heating.valves.fourThreeWay.position` reports `domesticHotWater`, the badge shows hot water. Valve position alone does not prove activity. On devices without current operation, known charging=false plus the selected circuit's circulation status can identify heating/off. Unsupported or incomplete signals show **Status unknown**; cooling/defrost are not silently reported as off.
+## Setup
 
-Pressure comes from `heating.sensors.pressure.supply`, which the [official catalogue](https://api.viessmann-climatesolutions.com/documentation/data-points) describes as water pressure in the supply. It does not use compressor/refrigerant pressure. Supported pressure units are converted to bar; missing, disconnected, disabled, negative or unsupported-unit readings show a dash. Pressure retains its own age internally and does not make the temperature-sensor status stale. A thick border identifies the active heating or hot-water block; inactive blocks use thin borders.
+1. Clone this repository and install [trmnlp](https://github.com/usetrmnl/trmnlp#readme).
+2. Set the target plugin in `src/settings.yml`. This repository targets plugin **510867**. Keep that ID when updating that instance. For a new private plugin, follow the [publishing instructions](auxiliary/development.md#publish-to-an-instance) to set up a separate target.
+3. From the repository directory, publish the plugin:
 
-## Electricity consumption and heat output
+   ```sh
+   trmnlp login
+   trmnlp push
+   ```
 
-All four layouts keep these quantities separate:
+4. Open the plugin's settings in TRMNL and enter the required installation, gateway, and device IDs.
+5. Enter your Viessmann Client ID in the OAuth settings. Register TRMNL's redirect URL in your Viessmann application, enable **OAuth Authentication** and **PKCE**, and authorize your ViCare account. The plugin definition supplies the provider URLs and scopes.
+6. Save and use **Force Refresh** to check the readings. Add the plugin to your device playlist and choose a layout.
 
-| Reading | Unit | Meaning |
+The default refresh interval is **15 minutes**. Data processing runs in TRMNL Serverless; no separate server is required.
+
+## Basic settings
+
+All of these are optional:
+
+| Setting | Default | When to change it |
 |---|---|---|
-| Electricity now / Strom aktuell | kW | Electrical input at the latest API update. |
-| Electricity today / Strom heute | kWh | Cumulative electrical energy for the running device day. |
-| Heat output now / Wärme aktuell | kW | Thermal output at the latest API update. |
-| Heat today / Wärme heute | kWh | Cumulative thermal energy for the running device day. |
+| Display language (`language`) | English (`en`) | Select German (`de`) for German labels and number formatting. |
+| Display time zone (`time_zone`) | `Europe/Berlin` | Set the installation's IANA time zone for timestamps and daily-counter date checks. |
+| Heating circuit (`circuit`) | `0` | Select the circuit that supplies your radiators or underfloor heating. |
+| Daily-counter read-time warning (`stale_minutes`) | `120` minutes | Set when an explicit `dayValueReadAt` timestamp should produce a clock and read-date marker. |
 
-The documented device-wide heat-energy field is `heating.heat.production.total`. Viessmann's [data-point catalogue](https://api.viessmann-climatesolutions.com/documentation/data-points) classifies it as Advanced Feature Data; `heating.heat.production.summary.heating` and `.summary.dhw` are Basic Feature Data. When the total is unavailable, the plugin adds the two basic counters' `properties.currentDay.value` readings and labels the result **Heating + hot water**. Device/account availability must be checked against the actual feature response. See the [field research](auxiliary/api-energy-fields.md) for sources and distinctions between documented features and compatibility aliases.
+Leave API feature overrides and curve reference points at their defaults unless your device requires them. The [complete configuration reference](auxiliary/configuration.md) explains every field and its effect.
 
-Current readings prefer whole-device features and fall back to compressor 0 where available. A **Compressor** label means that other consumers or heat sources, such as pumps or the auxiliary heater, are not included. Do not treat that value as a whole-system measurement.
+## Reading the dashboard
 
-Daily readings prefer an API total and never add it to its own component counters. When no total is available, the plugin adds heating and DHW counters and records their scope internally. Electrical totals also include a cooling counter when one is present and valid; the heating/DHW heat fallback excludes cooling. The API's reported total is used as reported.
+- **Heating:** outdoor temperature, room target, pressure, heating curve, actual circuit supply and its target, and daily heating energy.
+- **Hot water:** cylinder temperature, target, and daily hot-water energy.
+- **Power / Leistung:** current electricity consumption and heat output in **kW**, plus compressor, electric auxiliary heater, and fan status.
+- **Usage today / Verbrauch heute:** daily electricity consumption and heat output in **kWh**. Yesterday's electricity appears in gray beside today's value; the arrow compares today's running total with yesterday's full-day total.
 
-Day counters use `currentDay` or the newest `day[0]` entry, with W/kW and Wh/kWh converted using the API unit. A counter without a timestamp from the current day in the configured time zone is withheld, preventing yesterday's number from being shown as today. Choose the installation's time zone for these checks. Changing the display time zone cannot rebin the API's day totals into a different calendar day.
+The badge identifies heating, hot water, off, or unknown activity. A thicker border marks the active heating or hot-water block. A dash means the relevant reading or status is unavailable.
 
-Missing features, unsupported units and disabled/error readings show a dash, not an invented zero. Thermal output is never inferred from electricity or COP, and day energy is not estimated by integrating infrequent power readings. Feature availability and update delays depend on the device and API plan; live availability for this installation still needs checking.
+A gray clock and **As of / Stand** date appear only for stale explicit `dayValueReadAt` fields. The footer shows the newest displayed data timestamp; it does not mean every value updated then. Viessmann's API can update different readings independently and can differ from ViCare.
 
-Each energy reading retains age metadata internally, with one combined latest-reading date in the footer. General feature-age warnings are hidden. Only explicit stale `dayValueReadAt` fields produce a visible clock and read-date marker. An unchanged hot-water counter can have an old timestamp while heating continues to update; this alone does not prove polling has failed. The plugin does not assume that an old component is inactive or up to date. **Current** means the latest API snapshot, not continuous monitoring. The default refresh is every 15 minutes. The [API debugging helper](auxiliary/README.md#optional-api-inventory-helper) includes both consumption and heat-production features if you need to identify an override.
+## Updating the plugin
 
-## Curve, targets and timestamps
+For a manual update, run `trmnlp push` with the existing plugin ID. The existing instance retains its configured device IDs and OAuth connection.
 
-The graph is recalculated on each refresh from the API's slope, offset, selected room setpoint, and circuit supply-temperature limits. It uses the nonlinear E3 calculation implemented by PyViCare for E3 heat pumps (matching the supplied Vitocal 250-A device roles), rather than the previous linear schema. The plot covers **−30 to 20 °C** with intermediate points drawing the curve smoothly. Minimum/maximum limits still produce plateaus; the separate temperature-pair list, maximum-limit annotation and dashed maximum line are omitted.
+For automatic updates, confirm the [publishing target](auxiliary/development.md#publish-to-an-instance), add your TRMNL account API key as the repository Actions secret **`TRMNL_API_KEY`**, then push to `main`. The workflow checks the plugin, publishes it to the configured instance, and verifies live polling. This key is for publishing and verification; it is not a Viessmann credential. Do not commit API keys or OAuth tokens.
 
-The API features used here expose parameters, not a directly sampled ViCare curve. Values should be compared with the app; firmware-specific control and filtered outdoor temperatures can cause differences. Room target comes from the active heating program, with a normal-program fallback for plotting. The curve is unavailable if no room target is supplied. There is no assumed 20 °C room target.
+## Further instructions
 
-The circuit maximum is read from `heating.circuits.N.temperature.levels.properties.max.value`, with its minimum applied when available. You can enter the device's current maximum in the fallback field (the supplied screenshot showed 50 °C); it is overridden when the API provides a maximum. Do not use an API command's allowed input range as the configured maximum.
-
-The heating curve shows only the supply target as an outlined diamond at the current outdoor temperature. Actual radiator supply is shown beside its live target; return temperature is omitted. Small dots mark the 10 °C curve steps, and the x axis has matching tick marks. The plot range includes the curve and target; actual readings are never clamped to the target. A configured supply-target feature is preferred, then the live circuit target `heating.circuits.N.temperature`, then a model-derived target at the current outdoor reading. Missing outdoor temperature omits the target marker; the target value remains in the metric row. Hot water retains its tile and target. Calculation and API-source annotations are omitted from the display. The hot-water target is the configured main setting, which can differ from a scheduled second temperature. The room and heating targets appear near the top of the heating block in every layout. In the diagnostic model, when supply comes from the selected heating circuit, return is read only from `heating.circuits.N.sensors.temperature.return`; an absent/disabled/disconnected sensor shows a dash. The global `heating.sensors.temperature.return` is used only alongside heat-pump supply, labeled **Heat pump return**. This prevents mixing a >40 °C heat-pump return with a ~26 °C circuit supply. No return is inferred from supply or a presumed temperature difference. The plugin never changes heat-pump settings.
-
-The old supply default read `heating.secondaryCircuit.sensors.temperature.supply`, which is the heat pump’s secondary-side sensor, not the selected heating circuit’s supply. These can differ during hot-water production or with buffering/mixing. Automatic selection now prefers `heating.circuits.N.sensors.temperature.supply`; the fallback is explicitly labeled. A large actual/target difference cannot establish overheating without knowing the sensor location and operating state. [PyViCare’s circuit and secondary-circuit getters](https://github.com/openviess/PyViCare/blob/588a107b78f61c8982e43439c91b268acfdd02a9/PyViCare/PyViCareHeatingDevice.py) document the separate features.
-
-**Why “Daten veraltet” appeared:** the previous implementation used the oldest timestamp across sensors, curve settings and mode. An unchanged curve or mode could therefore make the dashboard appear stale. Freshness now uses only valid supply, hot-water and outdoor sensor timestamps. Changing the time zone affects presentation, not age. A sensor's own API timestamp may still describe its last change rather than a new sample; an old timestamp alone does not prove the device is disconnected. Missing sensor timestamps are identified separately.
-
-Local time defaults to **Europe/Berlin**, including winter/summer transitions. Choose another IANA zone in **Display time zone**. Dates follow that zone’s regional convention independently of label language: Berlin uses `18.10.2026`, New York `10/18/2026`, London `18/10/2026`, and Tokyo `2026/10/18`. Time stays in 24-hour format. UTC and fixed-offset zones use ISO-style `2026-10-18` dates; invalid zones fall back to UTC. Time-zone abbreviations and offsets remain hidden. Native `Intl.DateTimeFormat` formats dates using the zone’s country from the public-domain IANA zone table. Gregorian dates and Latin digits keep the day counters consistent.
-
-## Troubleshooting
-
-- **HTTP 401:** verify both OAuth toggles and the polling header above, then reconnect if necessary. A **code challenge required** error requires PKCE and a new authorization attempt.
-- **HTTP 403 / 429:** check Viessmann API permissions or wait for the quota to reset.
-- **Large payload:** verify **Edit Markup → Serverless** contains `src/transform.js` with **Node** selected. Reset plugin health and refresh after correcting it.
-- **Missing reading:** verify the feature name, enabled/error state and availability. Missing data displays a dash, never an invented zero.
-- **Stale/unknown timestamp:** compare the sensor's own API timestamp in the selected time zone. An offline E-Ink display keeps its last image until it renders again.
-- **Manual editor updates:** update **Shared**, all four layout tabs and **Serverless** together. Each layout now calls the dashboard defined in Shared.
-
-See [auxiliary documentation](auxiliary/README.md) for feature mappings, API inventory and safe live-poll diagnostics. The [official trmnlp README](https://github.com/usetrmnl/trmnlp) documents the native commands and workflow.
-
-The footer contains one update date: the latest timestamp among the displayed temperature/pressure readings and valid power/day counters and component activity, formatted in the configured time zone. It is the newest data timestamp, not a claim that every reading updated then. The older footer used the oldest sensor timestamp; independent feature timestamps explain why it could lag the power counters. General feature-age labels are omitted; age flags and timestamps remain available internally for diagnostics. Stale explicit `dayValueReadAt` fields are the sole exception and show a local read date beside the relevant daily quantity. No bottom-right branding is displayed.
-
-The per-use breakdown (black labels and values) in each use block reads that use's `heating.power.consumption.summary.heating`/`.dhw` and `heating.heat.production.summary.heating`/`.dhw` counters independently, even when whole-device totals are available. Missing or previous-day values show a dash rather than a guessed allocation. Actual zero remains zero. Electricity and produced heat stay separate.
-
-The Usage today heat subtitle is **Whole device / Gesamtes Gerät**, including the heating + hot-water fallback sum. Internal scope metadata still records whether a device counter or a component sum supplied the number; the fallback does not assume cooling heat.
-
-Return readouts and hot-water flow readouts are hidden. The selected radiator circuit supply is displayed beside its live target. The transform retains sensor models and activity gating for diagnostics; targets remain visible.
-
-The full layout places Heating on the left, Hot water above Power / Leistung on the right, and a full-width Usage today / Verbrauch heute block at the bottom. Power contains current electricity consumption and heat output in kW, plus compressor, auxiliary-heater and fan activity with small monochrome glyphs. Usage today contains daily electricity and heat totals in kWh. The selected radiator circuit supply and its target remain beside the heating curve; pressure stays near the room setpoint. Other display sizes adapt the same four blocks.
-
-Component activity comes from `heating.compressors.N.properties.active`, `heating.heatingRod.status.properties.overall` (or its `level1`–`level3` booleans), and `heating.primaryCircuit.fans.N.current.properties.value` (fan speed). Any running compressor/fan means On; Off requires all reported components in that group to have valid inactive readings. Missing, disabled or disconnected states show a dash. The auxiliary heater falls back to `heating.heatingRod.power.consumption.current` when stage status is unavailable and the measurement has valid W/kW units. Zero draw means Off. `heating.heatingRod.active` only reports heater availability; neither it, permission settings nor accumulated energy indicates actual activity.
-
-The graph's side readout shows the selected radiator circuit's actual supply (**Circuit supply / Heizkreis-Vorlauf**) and live target (**Supply target temperature / Vorlauf-Solltemperatur**). These come strictly from `heating.circuits.N.sensors.temperature.supply` and `heating.circuits.N.temperature`. Neither heat-pump sensors nor custom overrides nor curve estimates supply these two displayed values. Missing/disconnected/disabled readings show dashes. Reported circuit readings remain visible when idle; the badge separately indicates activity. The target marker also uses this live circuit target. Return temperature remains hidden.
-
-
-Usage today shows yesterday's completed electricity total in gray immediately to the left of today's value, with a large comparison arrow between them. Heat shows today's total only. Arrows compare today's running total with yesterday's full-day total: ↗ higher, ↘ lower, → equal. This is not a comparison at the same time of day. Historical values come from Viessmann `day[1]` arrays anchored to the current date in the configured time zone. Device totals are compared with device totals; heating/DHW fallback sums use the same components for both days, including cooling only for electricity when present. Missing or incomplete history shows a dash without an arrow. Stale day arrays are withheld; yesterday is never inferred from monthly or weekly counters.
-
-
-Daily values show a small gray clock and **As of / Stand** read date only when their selected API feature explicitly supplies `properties.dayValueReadAt` and it is older than `stale_minutes` (default 120 minutes). The date uses the configured time zone and regional format. Summed totals use the oldest valid explicit read time among their selected components. Missing or invalid `dayValueReadAt` fields produce no marker; general feature timestamps never trigger this visible marker. The numeric values remain readable and unchanged. Completed yesterday totals do not get a separate age marker.
+- [Local preview, testing, and publishing](auxiliary/development.md)
+- [Complete configuration and OAuth settings](auxiliary/configuration.md)
+- [Troubleshooting and API debugging tools](auxiliary/troubleshooting.md)
+- [Sensor, status, and curve mappings](auxiliary/api-reference.md)
+- [Electricity and heat counter selection](auxiliary/api-energy-fields.md)
