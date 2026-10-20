@@ -40,19 +40,15 @@ Each daily counter needs recognized energy units and a feature timestamp on the 
 
 The transform records the selected features in `today_features`. Summed totals also retain their components' update times and age flags. These general feature-age flags are diagnostic metadata, not visible stale markers.
 
-## Yesterday's electricity comparison
+## Daily electricity history
 
-The display shows yesterday's completed electricity total in gray to the left of today's running value, with an arrow between them:
+The usage block shows seven daily electricity bars, oldest first: six completed days in black and today's running consumption in gray. Today's large numeric value remains to the right of the chart; the heat display shows today's total only. Bars share a zero baseline and an automatic scale. Missing days remain gaps, while genuine zero readings have a baseline tick.
 
-- **↗** Today's running total is higher.
-- **↘** Today's running total is lower.
-- **→** The totals are equal.
+The chart uses the API's existing daily arrays without extra requests or stored history. Dates follow the configured local calendar, including daylight-saving changes. Full layouts label every day; compact layouts label the first day and today. English and German labels follow the display language, while dates follow the configured time zone's regional format.
 
-This compares a running day with a completed day, not matching times of day. The heat display shows today's total only.
+Historical bars come from `properties.day.value[1]` through `[6]`; today's bar uses the same selected value as the large number. Its array must have a feature timestamp from today in the configured time zone, using the same calendar-date check as today's daily counter. `properties.dayValueReadAt.value` controls only the age marker: it can lag even after the array rolls over and does not determine the date of its bins. An array whose feature timestamp is missing or from another day, a missing history bin, or an unsupported unit leaves the affected historical bar unavailable. Monthly and weekly counters are not used to reconstruct yesterday.
 
-History comes from `properties.day.value[1]`. Its array must have a feature timestamp from today in the configured time zone, using the same calendar-date check as today's daily counter. `properties.dayValueReadAt.value` controls only the age marker: it can lag even after the array rolls over and does not determine the date of its bins. An array whose feature timestamp is missing or from another day, a missing history bin, or an unsupported unit produces a dash without a comparison arrow. Monthly and weekly counters are not used to reconstruct yesterday.
-
-Device totals are compared with device history. Heating/hot-water fallback sums require the same uses in both days, including cooling when it forms part of today's electrical sum. Missing components are not treated as zero. When today's value is absent, available yesterday history may still be shown, without an arrow.
+Device totals use device history. Each historical fallback sum requires the same uses as today, including cooling when it forms part of the electrical total; missing components are not treated as zero. When today's value is absent, valid historical bars may still be shown.
 
 ## Read-time markers
 

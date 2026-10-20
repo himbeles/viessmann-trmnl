@@ -67,7 +67,7 @@ def main():
             'displayed_temperatures': variables.get('temperatures'),
             'components': variables.get('components'),
             'daily_comparison': {quantity: {key: variables.get(quantity, {}).get(key)
-                for key in ('today_kwh', 'yesterday_kwh', 'trend', 'day_read_time')} for quantity in ('energy', 'heat')},
+                for key in ('today_kwh', 'yesterday_kwh', 'trend', 'day_read_time', 'history')} for quantity in ('energy', 'heat')},
             'pressure_bar': variables.get('pressure', {}).get('bar'),
             'return_temperature_c': variables.get('return_reading', {}).get('value'),
             'return_scope': variables.get('return_reading', {}).get('scope'),

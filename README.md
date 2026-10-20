@@ -75,7 +75,7 @@ Leave API feature overrides and curve reference points at their defaults unless 
 - **Heating:** outdoor temperature, room target, pressure, heating curve, actual circuit supply and its target, and daily heating energy.
 - **Hot water:** cylinder temperature, target, and daily hot-water energy.
 - **Power / Leistung:** current electricity consumption and heat output in **kW**, plus compressor, electric auxiliary heater, and fan status.
-- **Usage today / Verbrauch heute:** daily electricity consumption and heat output in **kWh**. Yesterday's electricity appears in gray beside today's value; the arrow compares today's running total with yesterday's full-day total.
+- **Usage today / Verbrauch heute:** daily electricity consumption and heat output in **kWh**. A seven-day electricity chart sits to the left of today's large value. Completed days are black; today's running total is gray. Missing history leaves gaps.
 
 The badge identifies heating, hot water, off, or unknown activity. A thicker border marks the active heating or hot-water block. A dash means the relevant reading or status is unavailable.
 

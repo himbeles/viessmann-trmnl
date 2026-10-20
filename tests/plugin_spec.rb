@@ -32,6 +32,7 @@ RSpec.describe 'Viessmann heat pump' do
   %w[en de].each do |language|
     %w[full half_horizontal half_vertical quadrant].each do |view|
       it "renders #{view} in #{language} through the official Liquid runtime" do
+        feature('heating.power.consumption.summary.total')['properties']['day']['value'] = [12.34, 15.8, 9.4, 17.2, 11.6, 6.3, 13.8]
         data['data'] << reading('heating.power.consumption.summary.heating', 'currentDay', 8)
         data['data'] << reading('heating.power.consumption.summary.dhw', 'currentDay', 4.34)
         data['data'] << reading('heating.heat.production.summary.heating', 'currentDay', 35)
@@ -534,10 +535,54 @@ RSpec.describe 'Viessmann heat pump' do
     expect(result.fetch('energy')).to include('yesterday_kwh' => 15.8, 'trend' => 'down')
     expect(result.fetch('heat')).to include('yesterday_kwh' => 50, 'trend' => 'down')
     html = document(render('full', 'de'))
-    expect(html.css('.vp-yesterday').map(&:text)).to eq(['Gestern15,8 kWh'])
-    expect(html.css('.vp-energy > div')[1].css('.vp-yesterday, .vp-trend')).to be_empty
-    expect(html.css('.vp-day-comparison').first.element_children.map { |node| node['class'] }).to eq(%w[vp-yesterday vp-comparison-arrow vp-today])
-    expect(html.css('.vp-trend').map { |node| node['aria-label'] }).to all(eq('Heute niedriger als gestern'))
+    expect(html.css('.vp-history-day').size).to eq(7)
+    expect(html.css('.vp-history-today').last['data-kwh']).to eq('12.34')
+    expect(html.css('.vp-history-today .vp-history-date').text).to eq('Heute')
+    expect(html.css('.vp-daily-usage').first.element_children.map { |node| node['class'] }).to eq(%w[vp-history vp-today])
+    expect(html.css('.vp-yesterday, .vp-trend, .vp-comparison-arrow')).to be_empty
+  end
+
+  it 'orders seven daily electricity bars oldest first and uses the displayed running total for today' do
+    counter = feature('heating.power.consumption.summary.total')['properties']
+    counter['day']['value'] = [99, 2, 3, 4, 5, 6, 7, 8]
+    days = transform.dig('energy', 'history')
+    expect(days.map { |day| day['kwh'] }).to eq([7, 6, 5, 4, 3, 2, 12.34])
+    expect(days.map { |day| day['date'] }).to eq((12..18).map { |day| "2026-10-#{day}" })
+    expect(days.map { |day| day['today'] }).to eq([false] * 6 + [true])
+    expect(days.last['height']).to be_between(90, 91)
+    expect(transform.fetch('heat')).not_to have_key('history')
+  end
+
+  it 'distinguishes missing bins from real zero without inventing history' do
+    counter = feature('heating.power.consumption.summary.total')['properties']
+    counter['currentDay']['value'] = 0
+    counter['day']['value'] = [0, 0, nil, -1, 'invalid']
+    days = transform.dig('energy', 'history')
+    expect(days.map { |day| day['kwh'] }).to eq([nil, nil, nil, nil, nil, 0, 0])
+    expect(days.last['height']).to eq(0)
+    html = document(render)
+    expect(html.css('.vp-history-missing').size).to eq(5)
+    expect(html.css('.vp-history-zero').size).to eq(2)
+    expect(html.css('.vp-history-bar')).to be_empty
+  end
+
+  it 'requires every summed electricity component for each historical bin' do
+    remove_energy_totals
+    data['data'] << reading('heating.power.consumption.heating', 'day', [1000, 2000, 3000], 'Wh')
+    data['data'] << reading('heating.power.consumption.dhw', 'day', [1, 0.5])
+    data['data'] << reading('heating.power.consumption.cooling', 'day', [0, 1, 1])
+    expect(transform.dig('energy', 'history').map { |day| day['kwh'] }).to eq([nil, nil, nil, nil, nil, 3.5, 2])
+  end
+
+  it 'labels consecutive local calendar days across DST and a year boundary' do
+    item = feature('heating.power.consumption.summary.total')
+    item['timestamp'] = '2026-10-25T23:45:00Z'
+    days = transform({ time_zone: 'Europe/Berlin' }, at: '2026-10-26T00:00:00Z').dig('energy', 'history')
+    expect(days.map { |day| day['date'] }).to eq((20..26).map { |day| "2026-10-#{day}" })
+    item['timestamp'] = '2027-01-01T00:10:00Z'
+    days = transform({ time_zone: 'America/New_York' }, at: '2027-01-01T01:00:00Z').dig('energy', 'history')
+    expect(days.first['date']).to eq('2026-12-25')
+    expect(days.last['date']).to eq('2026-12-31')
   end
 
   it 'keeps yesterday zero and distinguishes rising, falling and unchanged totals' do
@@ -555,7 +600,7 @@ RSpec.describe 'Viessmann heat pump' do
     item = feature('heating.power.consumption.summary.total')
     item['properties']['day']['value'] = [12.34]
     expect(transform.fetch('energy')).to include('yesterday_kwh' => nil, 'trend' => nil)
-    expect(document(render).css('.vp-yesterday').first.text).to eq('Yesterday—')
+    expect(document(render).css('.vp-history-missing').size).to eq(6)
     item['properties']['day']['value'] = [12.34, 20]
     item['properties']['day']['unit'] = 'kW'
     expect(transform.dig('energy', 'yesterday_kwh')).to be_nil

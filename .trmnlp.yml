@@ -115,7 +115,7 @@ variables:
       timestamp: "2026-10-18T18:00:00Z"
       properties:
         day:
-          value: [12.34, 15.8]
+          value: [12.34, 15.8, 9.4, 17.2, 11.6, 6.3, 13.8]
           unit: kilowattHour
         currentDay:
           value: 12.34

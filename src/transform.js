@@ -482,35 +482,47 @@ function run(input) {
     // Anchor bins to the feature's local date, as for today's day[0]. The
     // separate dayValueReadAt can lag even after the array rolls over; it
     // controls the age marker, not which calendar day an array bin represents.
-    const history = names => {
+    const history = (names, index = 1) => {
       for (const name of names) {
         const item = rawFeature(name);
         if (!Array.isArray(item?.properties?.day?.value)) continue;
         const timestamp = Date.parse(item.timestamp);
         if (today == null || calendarDate(timestamp) !== today) continue;
-        const amount = convert({ ...item.properties.day, value: item.properties.day.value[1] }, 'energy');
+        const amount = convert({ ...item.properties.day, value: item.properties.day.value[index] }, 'energy');
         if (amount != null) return amount;
       }
       return null;
     };
-    const deviceHistory = () => history([`heating.${base}.total`, `heating.${base}.summary.total`, `heating.${base}.summary`]);
-    const useHistory = scope => history([`heating.${base}.${scope}`, `heating.${base}.summary.${scope}`]);
-    const combinedHistory = scopes => {
-      const amounts = scopes.map(useHistory);
+    const deviceHistory = index => history([`heating.${base}.total`, `heating.${base}.summary.total`, `heating.${base}.summary`], index);
+    const useHistory = (scope, index) => history([`heating.${base}.${scope}`, `heating.${base}.summary.${scope}`], index);
+    const combinedHistory = (scopes, index) => {
+      const amounts = scopes.map(scope => useHistory(scope, index));
       return amounts.every(amount => amount != null) ? amounts.reduce((sum, amount) => sum + amount, 0) : null;
     };
-    let yesterday = null;
-    if (dailyFeature) yesterday = history([dailyFeature, dailyFeature.replace('.summary.', '.')]);
-    else if (metrics.today_scope === 'heating_dhw') yesterday = combinedHistory(['heating', 'dhw']);
-    else if (metrics.today_scope === 'heating_dhw_cooling') yesterday = combinedHistory(['heating', 'dhw', 'cooling']);
-    else {
-      yesterday = deviceHistory();
-      // With no current counter, yesterday can still be shown, without an arrow.
-      if (yesterday == null && metrics.today_kwh == null) {
-        const scopes = ['heating', 'dhw'];
-        if (base === 'power.consumption' && [`heating.${base}.cooling`, `heating.${base}.summary.cooling`].some(name => rawFeature(name))) scopes.push('cooling');
-        yesterday = combinedHistory(scopes);
-      }
+    const historicalDay = index => {
+      if (dailyFeature) return history([dailyFeature, dailyFeature.replace('.summary.', '.')], index);
+      if (metrics.today_scope === 'heating_dhw') return combinedHistory(['heating', 'dhw'], index);
+      if (metrics.today_scope === 'heating_dhw_cooling') return combinedHistory(['heating', 'dhw', 'cooling'], index);
+      const device = deviceHistory(index);
+      if (device != null || metrics.today_kwh != null) return device;
+      const scopes = ['heating', 'dhw'];
+      if (base === 'power.consumption' && [`heating.${base}.cooling`, `heating.${base}.summary.cooling`].some(name => rawFeature(name))) scopes.push('cooling');
+      return combinedHistory(scopes, index);
+    };
+    const yesterday = historicalDay(1);
+    if (base === 'power.consumption') {
+      // Subtract calendar dates, not 24-hour intervals: DST days can be 23/25 h.
+      const parts = today?.split('-').map(Number);
+      const dateLabel = new Intl.DateTimeFormat(dateLocale, { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
+      const days = Array.from({ length: 7 }, (_, position) => {
+        const index = 6 - position;
+        const amount = index === 0 ? metrics.today_kwh : historicalDay(index);
+        const date = parts ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] - index, 12)) : null;
+        return { date: date?.toISOString().slice(0, 10) ?? null, label: date ? dateLabel.format(date) : '—',
+          today: index === 0, kwh: amount == null ? null : Math.round(amount * 1000) / 1000 };
+      });
+      const scale = Math.max(...days.map(day => day.kwh ?? 0)) * 1.1 || 1;
+      metrics.history = days.map(day => ({ ...day, height: day.kwh == null ? null : Math.round(day.kwh / scale * 1000) / 10 }));
     }
     metrics.yesterday_kwh = yesterday == null ? null : Math.round(yesterday * 1000) / 1000;
     metrics.trend = metrics.today_kwh == null || metrics.yesterday_kwh == null ? null
