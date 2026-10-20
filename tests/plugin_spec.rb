@@ -557,13 +557,32 @@ RSpec.describe 'Viessmann heat pump' do
     expect(transform.fetch('energy')).to include('yesterday_kwh' => nil, 'trend' => nil)
     expect(document(render).css('.vp-yesterday').first.text).to eq('Yesterday—')
     item['properties']['day']['value'] = [12.34, 20]
-    item['properties']['dayValueReadAt'] = { 'value' => '2026-10-17T18:00:00Z' }
-    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
-    item['properties'].delete('dayValueReadAt')
     item['properties']['day']['unit'] = 'kW'
     expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
     item['properties']['day']['unit'] = 'kWh'
     item['timestamp'] = '2026-10-17T18:00:00Z'
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+  end
+
+  it 'keeps yesterday history when dayValueReadAt lags behind a current feature' do
+    item = feature('heating.power.consumption.summary.total')
+    item['timestamp'] = '2026-10-20T05:20:36Z'
+    item['properties']['currentDay']['value'] = 0.8
+    item['properties']['day']['value'] = [0.8, 3.1]
+    item['properties']['dayValueReadAt'] = { 'value' => '2026-10-19T17:50:53Z' }
+    result = transform(at: '2026-10-20T05:50:00Z').fetch('energy')
+    expect(result).to include('today_kwh' => 0.8, 'yesterday_kwh' => 3.1, 'trend' => 'down')
+    expect(result.fetch('day_read_time')).to include('stale' => true)
+    item['properties']['dayValueReadAt']['value'] = 'invalid'
+    expect(transform(at: '2026-10-20T05:50:00Z').dig('energy', 'yesterday_kwh')).to eq(3.1)
+  end
+
+  it 'rejects a previous-day array even when dayValueReadAt is from today' do
+    item = feature('heating.power.consumption.summary.total')
+    item['timestamp'] = '2026-10-17T18:00:00Z'
+    item['properties']['dayValueReadAt'] = { 'value' => now }
+    expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
+    item.delete('timestamp')
     expect(transform.dig('energy', 'yesterday_kwh')).to be_nil
   end
 

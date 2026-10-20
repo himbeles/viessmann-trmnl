@@ -479,12 +479,14 @@ function run(input) {
     }
 
     // Historical day[1] is yesterday's completed local day, not a rolling 24 h.
-    // Only use an array anchored to today; an old day[0] can be a partial day.
+    // Anchor bins to the feature's local date, as for today's day[0]. The
+    // separate dayValueReadAt can lag even after the array rolls over; it
+    // controls the age marker, not which calendar day an array bin represents.
     const history = names => {
       for (const name of names) {
         const item = rawFeature(name);
         if (!Array.isArray(item?.properties?.day?.value)) continue;
-        const timestamp = Date.parse(item.properties.dayValueReadAt?.value ?? item.timestamp);
+        const timestamp = Date.parse(item.timestamp);
         if (today == null || calendarDate(timestamp) !== today) continue;
         const amount = convert({ ...item.properties.day, value: item.properties.day.value[1] }, 'energy');
         if (amount != null) return amount;

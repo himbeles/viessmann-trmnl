@@ -50,7 +50,7 @@ The display shows yesterday's completed electricity total in gray to the left of
 
 This compares a running day with a completed day, not matching times of day. The heat display shows today's total only.
 
-History comes from `properties.day.value[1]`. Its array must be anchored to today in the configured time zone, using `properties.dayValueReadAt.value` when supplied and the feature timestamp otherwise. A stale array, missing history bin, or unsupported unit produces a dash without a comparison arrow. Monthly and weekly counters are not used to reconstruct yesterday.
+History comes from `properties.day.value[1]`. Its array must have a feature timestamp from today in the configured time zone, using the same calendar-date check as today's daily counter. `properties.dayValueReadAt.value` controls only the age marker: it can lag even after the array rolls over and does not determine the date of its bins. An array whose feature timestamp is missing or from another day, a missing history bin, or an unsupported unit produces a dash without a comparison arrow. Monthly and weekly counters are not used to reconstruct yesterday.
 
 Device totals are compared with device history. Heating/hot-water fallback sums require the same uses in both days, including cooling when it forms part of today's electrical sum. Missing components are not treated as zero. When today's value is absent, available yesterday history may still be shown, without an arrow.
 
